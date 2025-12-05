@@ -27,6 +27,16 @@ export interface LayerStats {
   avgFLRR: number;
   managers: number;
   ics: number;
+  avgTenure: number;
+}
+
+export interface DepartmentSpanStats {
+  department: string;
+  avgSpan: number;
+  layers: number;
+  managerCount: number;
+  totalEmployees: number;
+  managerPercent: number;
 }
 
 export interface SpanStats {
@@ -89,6 +99,7 @@ export interface AnalysisData {
   layerStats: LayerStats[];
   spanStats: SpanStats[];
   departmentStats: DepartmentStats[];
+  departmentSpanStats: DepartmentSpanStats[];
   roleFamilyStats: RoleFamilyStats[];
   tenureBands: TenureBand[];
   quickWins: QuickWin[];
@@ -101,5 +112,8 @@ export interface AnalysisData {
     bestCostPercent: number;
     avgVariablePercent: number;
     managerToICRatio: number;
+    totalManagers: number;
+    managerPercent: number;
+    ceoDirectReports: number;
   };
 }

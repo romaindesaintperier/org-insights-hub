@@ -1,10 +1,12 @@
 import { useState, useCallback } from 'react';
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, Settings } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { parseExcelFile } from '@/lib/excel-parser';
+import { Badge } from '@/components/ui/badge';
+import { parseExcelFile, readFileHeaders, autoDetectColumns, ColumnMapping, fieldLabels, requiredFields, importantFields } from '@/lib/excel-parser';
 import { Employee } from '@/types/employee';
+import { ColumnMappingModal } from './ColumnMappingModal';
 
 interface FileUploadProps {
   onDataLoaded: (employees: Employee[]) => void;
@@ -16,6 +18,12 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
+  
+  // Column mapping state
+  const [fileHeaders, setFileHeaders] = useState<string[]>([]);
+  const [detectedMapping, setDetectedMapping] = useState<ColumnMapping | null>(null);
+  const [showMappingModal, setShowMappingModal] = useState(false);
+  const [currentFile, setCurrentFile] = useState<File | null>(null);
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
@@ -27,9 +35,47 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
     setErrors([]);
     setWarnings([]);
     setFileName(file.name);
+    setCurrentFile(file);
 
     try {
-      const { employees, errors: parseErrors, warnings: parseWarnings } = await parseExcelFile(file);
+      // Read headers and auto-detect mapping
+      const headers = await readFileHeaders(file);
+      setFileHeaders(headers);
+      
+      const mapping = autoDetectColumns(headers);
+      setDetectedMapping(mapping);
+      
+      // Check for missing required columns
+      const missingRequired = requiredFields.filter(f => !mapping[f]);
+      const missingImportant = importantFields.filter(f => !mapping[f]);
+      
+      if (missingRequired.length > 0) {
+        // Show mapping modal for user to manually map
+        setShowMappingModal(true);
+        setIsLoading(false);
+      } else if (missingImportant.length > 0) {
+        // Show mapping summary with option to edit
+        setShowMappingModal(true);
+        setIsLoading(false);
+      } else {
+        // All good, process directly but show mapping summary
+        setShowMappingModal(true);
+        setIsLoading(false);
+      }
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : 'Failed to parse file']);
+      setIsLoading(false);
+    }
+  }, []);
+
+  const handleConfirmMapping = useCallback(async (mapping: ColumnMapping) => {
+    if (!currentFile) return;
+    
+    setShowMappingModal(false);
+    setIsLoading(true);
+
+    try {
+      const { employees, errors: parseErrors, warnings: parseWarnings } = await parseExcelFile(currentFile, mapping);
       
       setErrors(parseErrors);
       setWarnings(parseWarnings);
@@ -42,7 +88,7 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [onDataLoaded]);
+  }, [currentFile, onDataLoaded]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -65,6 +111,18 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
     const file = e.target.files?.[0];
     if (file) handleFile(file);
   }, [handleFile]);
+
+  const getMappingSummary = () => {
+    if (!detectedMapping) return null;
+    
+    const mapped = (Object.keys(detectedMapping) as (keyof ColumnMapping)[]).filter(k => detectedMapping[k]);
+    const missingRequired = requiredFields.filter(f => !detectedMapping[f]);
+    const missingImportant = importantFields.filter(f => !detectedMapping[f]);
+    
+    return { mapped, missingRequired, missingImportant };
+  };
+
+  const summary = getMappingSummary();
 
   return (
     <div className="min-h-screen flex items-center justify-center p-8 bg-background">
@@ -90,7 +148,7 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
               onDrop={handleDrop}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
-              className="flex flex-col items-center justify-center space-y-4 cursor-pointer"
+              className="flex flex-col items-center justify-center space-y-4 cursor-pointer relative"
             >
               <div className={`p-4 rounded-full transition-colors ${
                 isDragging ? 'bg-primary/20' : 'bg-secondary'
@@ -127,11 +185,45 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
           </CardContent>
         </Card>
 
-        {fileName && (
+        {fileName && !showMappingModal && (
           <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
             <FileSpreadsheet className="w-4 h-4" />
             {fileName}
           </div>
+        )}
+
+        {/* Mapping Summary */}
+        {fileName && summary && !showMappingModal && (
+          <Card className="bg-secondary/30">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-medium text-foreground">Column Mapping Detected</h3>
+                <Button variant="ghost" size="sm" onClick={() => setShowMappingModal(true)}>
+                  <Settings className="w-4 h-4 mr-1" />
+                  Edit Mapping
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {summary.mapped.map(field => (
+                  <Badge key={field} variant="secondary" className="bg-success/20 text-success">
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                    {fieldLabels[field]}
+                  </Badge>
+                ))}
+                {summary.missingRequired.map(field => (
+                  <Badge key={field} variant="destructive">
+                    <AlertCircle className="w-3 h-3 mr-1" />
+                    {fieldLabels[field]}
+                  </Badge>
+                ))}
+                {summary.missingImportant.map(field => (
+                  <Badge key={field} variant="secondary" className="bg-warning/20 text-warning">
+                    {fieldLabels[field]}
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {errors.length > 0 && (
@@ -162,26 +254,26 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
 
         <Card className="bg-secondary/50">
           <CardContent className="p-6">
-            <h3 className="font-medium mb-3 text-foreground">Expected Columns:</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">• Employee ID *</span>
-              <span className="font-medium text-foreground">• Name *</span>
-              <span className="font-medium text-foreground">• FLRR *</span>
-              <span className="font-medium text-foreground">• Role Family *</span>
-              <span className="font-medium text-foreground">• Country Tag *</span>
-              <span>• Manager ID</span>
-              <span>• Department</span>
-              <span>• Title</span>
-              <span>• Location</span>
-              <span>• Hire Date</span>
-              <span>• Base Salary</span>
-              <span>• Bonus</span>
-              <span>• Cost Center</span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-3">* Required columns</p>
+            <h3 className="font-medium mb-3 text-foreground">
+              The tool will automatically detect and map your columns. You can also manually adjust the mapping after uploading.
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Supported formats: .xlsx, .xls, .csv
+            </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Column Mapping Modal */}
+      {detectedMapping && (
+        <ColumnMappingModal
+          open={showMappingModal}
+          onOpenChange={setShowMappingModal}
+          headers={fileHeaders}
+          mapping={detectedMapping}
+          onConfirm={handleConfirmMapping}
+        />
+      )}
     </div>
   );
 }

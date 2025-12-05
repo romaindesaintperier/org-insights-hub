@@ -1,23 +1,23 @@
 import { Employee } from '@/types/employee';
 import * as XLSX from 'xlsx';
 
-interface ColumnMapping {
-  employeeId: string;
-  name: string;
-  managerId: string;
-  department: string;
-  title: string;
-  location: string;
-  hireDate: string;
-  flrr: string;
-  baseSalary: string;
-  bonus: string;
-  roleFamily: string;
-  countryTag: string;
-  costCenter: string;
+export interface ColumnMapping {
+  employeeId: string | null;
+  name: string | null;
+  managerId: string | null;
+  department: string | null;
+  title: string | null;
+  location: string | null;
+  hireDate: string | null;
+  flrr: string | null;
+  baseSalary: string | null;
+  bonus: string | null;
+  roleFamily: string | null;
+  countryTag: string | null;
+  costCenter: string | null;
 }
 
-const defaultMapping: ColumnMapping = {
+export const fieldLabels: Record<keyof ColumnMapping, string> = {
   employeeId: 'Employee ID',
   name: 'Name',
   managerId: 'Manager ID',
@@ -33,29 +33,46 @@ const defaultMapping: ColumnMapping = {
   costCenter: 'Cost Center',
 };
 
+export const requiredFields: (keyof ColumnMapping)[] = ['employeeId', 'name', 'flrr', 'roleFamily', 'countryTag'];
+export const importantFields: (keyof ColumnMapping)[] = ['managerId'];
+
 function findColumn(headers: string[], possibleNames: string[]): string | null {
   const lowerPossible = possibleNames.map(n => n.toLowerCase());
   const found = headers.find(h => lowerPossible.includes(h.toLowerCase()));
   return found || null;
 }
 
-function autoDetectColumns(headers: string[]): Partial<ColumnMapping> {
-  const mapping: Partial<ColumnMapping> = {};
+const columnPatterns: Record<keyof ColumnMapping, string[]> = {
+  employeeId: ['employee id', 'emp id', 'employee_id', 'empid', 'id', 'employee number'],
+  name: ['name', 'employee name', 'full name', 'emp name'],
+  managerId: ['manager id', 'manager_id', 'mgr id', 'reports to', 'supervisor id', 'manager'],
+  department: ['department', 'dept', 'division', 'org unit'],
+  title: ['title', 'job title', 'position', 'role', 'level'],
+  location: ['location', 'office', 'city', 'site', 'work location'],
+  hireDate: ['hire date', 'start date', 'hire_date', 'date hired', 'join date'],
+  flrr: ['flrr', 'fully loaded', 'total cost', 'labor cost', 'fully-loaded run-rate'],
+  baseSalary: ['base salary', 'base', 'salary', 'base pay', 'annual salary'],
+  bonus: ['bonus', 'variable', 'incentive', 'target bonus', 'variable pay'],
+  roleFamily: ['role family', 'job family', 'function', 'job function', 'role_family'],
+  countryTag: ['country tag', 'cost tag', 'location tag', 'best cost', 'high cost', 'country_tag'],
+  costCenter: ['cost center', 'cost_center', 'cc', 'business unit'],
+};
 
-  const columnPatterns: Record<keyof ColumnMapping, string[]> = {
-    employeeId: ['employee id', 'emp id', 'employee_id', 'empid', 'id', 'employee number'],
-    name: ['name', 'employee name', 'full name', 'emp name'],
-    managerId: ['manager id', 'manager_id', 'mgr id', 'reports to', 'supervisor id'],
-    department: ['department', 'dept', 'division', 'org unit'],
-    title: ['title', 'job title', 'position', 'role', 'level'],
-    location: ['location', 'office', 'city', 'site', 'work location'],
-    hireDate: ['hire date', 'start date', 'hire_date', 'date hired', 'join date'],
-    flrr: ['flrr', 'fully loaded', 'total cost', 'labor cost', 'fully-loaded run-rate'],
-    baseSalary: ['base salary', 'base', 'salary', 'base pay', 'annual salary'],
-    bonus: ['bonus', 'variable', 'incentive', 'target bonus', 'variable pay'],
-    roleFamily: ['role family', 'job family', 'function', 'job function', 'role_family'],
-    countryTag: ['country tag', 'cost tag', 'location tag', 'best cost', 'high cost', 'country_tag'],
-    costCenter: ['cost center', 'cost_center', 'cc', 'business unit'],
+export function autoDetectColumns(headers: string[]): ColumnMapping {
+  const mapping: ColumnMapping = {
+    employeeId: null,
+    name: null,
+    managerId: null,
+    department: null,
+    title: null,
+    location: null,
+    hireDate: null,
+    flrr: null,
+    baseSalary: null,
+    bonus: null,
+    roleFamily: null,
+    countryTag: null,
+    costCenter: null,
   };
 
   Object.entries(columnPatterns).forEach(([key, patterns]) => {
@@ -68,7 +85,39 @@ function autoDetectColumns(headers: string[]): Partial<ColumnMapping> {
   return mapping;
 }
 
-export function parseExcelFile(file: File): Promise<{ employees: Employee[]; errors: string[]; warnings: string[] }> {
+export function readFileHeaders(file: File): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
+
+        if (jsonData.length < 1) {
+          reject(new Error('File is empty'));
+          return;
+        }
+
+        const headers = (jsonData[0] as string[]).map(h => String(h || '').trim()).filter(h => h);
+        resolve(headers);
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsBinaryString(file);
+  });
+}
+
+export function parseExcelFile(
+  file: File, 
+  customMapping?: ColumnMapping
+): Promise<{ employees: Employee[]; errors: string[]; warnings: string[] }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
@@ -86,24 +135,20 @@ export function parseExcelFile(file: File): Promise<{ employees: Employee[]; err
         }
 
         const headers = (jsonData[0] as string[]).map(h => String(h || '').trim());
-        const detectedMapping = autoDetectColumns(headers);
+        const mapping = customMapping || autoDetectColumns(headers);
         const errors: string[] = [];
         const warnings: string[] = [];
 
         // Check required columns
-        const requiredColumns: (keyof ColumnMapping)[] = ['employeeId', 'name', 'flrr', 'roleFamily', 'countryTag'];
-        const missingRequired = requiredColumns.filter(col => !detectedMapping[col]);
-        
+        const missingRequired = requiredFields.filter(col => !mapping[col]);
         if (missingRequired.length > 0) {
-          errors.push(`Missing required columns: ${missingRequired.join(', ')}`);
+          errors.push(`Missing required columns: ${missingRequired.map(f => fieldLabels[f]).join(', ')}`);
         }
 
-        // Check optional columns
-        const optionalColumns: (keyof ColumnMapping)[] = ['managerId', 'department', 'title', 'location', 'hireDate', 'baseSalary', 'bonus', 'costCenter'];
-        const missingOptional = optionalColumns.filter(col => !detectedMapping[col]);
-        
-        if (missingOptional.length > 0) {
-          warnings.push(`Optional columns not found (will use defaults): ${missingOptional.join(', ')}`);
+        // Check important columns
+        const missingImportant = importantFields.filter(col => !mapping[col]);
+        if (missingImportant.length > 0) {
+          warnings.push(`Important columns not mapped (spans/layers analysis will be limited): ${missingImportant.map(f => fieldLabels[f]).join(', ')}`);
         }
 
         const employees: Employee[] = [];
@@ -113,7 +158,7 @@ export function parseExcelFile(file: File): Promise<{ employees: Employee[]; err
           if (!row || row.length === 0 || row.every(cell => !cell)) continue;
 
           const getValue = (key: keyof ColumnMapping): string | number | Date | null => {
-            const colName = detectedMapping[key];
+            const colName = mapping[key];
             if (!colName) return null;
             const colIndex = headers.indexOf(colName);
             return colIndex >= 0 ? row[colIndex] : null;
@@ -175,6 +220,3 @@ export function parseExcelFile(file: File): Promise<{ employees: Employee[]; err
     reader.readAsBinaryString(file);
   });
 }
-
-export { defaultMapping };
-export type { ColumnMapping };
