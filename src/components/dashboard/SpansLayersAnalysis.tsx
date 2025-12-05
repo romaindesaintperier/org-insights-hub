@@ -2,9 +2,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { AnalysisData, Benchmarks } from '@/types/employee';
-import { formatCurrency } from '@/lib/analysis';
+import { formatCurrency, formatPercent } from '@/lib/analysis';
 import { defaultBenchmarks } from '@/lib/analysis';
-import { AlertTriangle, CheckCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Users, Layers, User } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface SpansLayersAnalysisProps {
   data: AnalysisData;
@@ -12,21 +13,21 @@ interface SpansLayersAnalysisProps {
 }
 
 export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: SpansLayersAnalysisProps) {
-  const { layerStats, spanStats } = data;
+  const { layerStats, spanStats, departmentSpanStats, totals } = data;
 
   // Span distribution data
   const spanDistribution = [
     { range: '1', count: spanStats.filter(s => s.directReports === 1).length },
-    { range: '2-3', count: spanStats.filter(s => s.directReports >= 2 && s.directReports <= 3).length },
-    { range: '4-6', count: spanStats.filter(s => s.directReports >= 4 && s.directReports <= 6).length },
-    { range: '7-10', count: spanStats.filter(s => s.directReports >= 7 && s.directReports <= 10).length },
+    { range: '2-4', count: spanStats.filter(s => s.directReports >= 2 && s.directReports <= 4).length },
+    { range: '5-7', count: spanStats.filter(s => s.directReports >= 5 && s.directReports <= 7).length },
+    { range: '8-10', count: spanStats.filter(s => s.directReports >= 8 && s.directReports <= 10).length },
     { range: '11+', count: spanStats.filter(s => s.directReports >= 11).length },
   ];
 
   const getSpanColor = (range: string) => {
     if (range === '1') return 'hsl(var(--destructive))';
-    if (range === '2-3') return 'hsl(var(--warning))';
-    if (range === '4-6' || range === '7-10') return 'hsl(var(--success))';
+    if (range === '2-4') return 'hsl(var(--warning))';
+    if (range === '5-7' || range === '8-10') return 'hsl(var(--success))';
     return 'hsl(var(--chart-3))';
   };
 
@@ -36,38 +37,174 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
     wide: spanStats.filter(s => s.directReports > benchmarks.maxSpan),
   };
 
+  // Org-wide average span
+  const orgAvgSpan = totals.avgSpan;
+  const orgAvgLayers = layerStats.length > 0 ? Math.max(...layerStats.map(l => l.layer)) + 1 : 0;
+
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Layer Cost Analysis */}
+      {/* Key Metrics Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Users className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Managers</p>
+                <p className="text-2xl font-semibold">{totals.totalManagers}</p>
+                <p className="text-xs text-muted-foreground">{formatPercent(totals.managerPercent)} of total</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-accent/10">
+                <User className="w-5 h-5 text-accent" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">CEO Direct Reports</p>
+                <p className="text-2xl font-semibold">{totals.ceoDirectReports}</p>
+                <p className="text-xs text-muted-foreground">Layer 1 headcount</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-secondary">
+                <Layers className="w-5 h-5 text-foreground" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Org Layers</p>
+                <p className="text-2xl font-semibold">{orgAvgLayers}</p>
+                <p className="text-xs text-muted-foreground">CEO = Layer 0</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-success/10">
+                <CheckCircle className="w-5 h-5 text-success" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Avg Span of Control</p>
+                <p className="text-2xl font-semibold">{orgAvgSpan.toFixed(1)}</p>
+                <p className="text-xs text-muted-foreground">Target: {benchmarks.minSpan}-{benchmarks.maxSpan}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Layer Analysis - 3 charts side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* FLRR by Layer */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">FLRR by Layer</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={layerStats} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} fontSize={11} />
+                  <YAxis type="category" dataKey="layer" tickFormatter={(v) => `L${v}`} fontSize={11} width={30} />
+                  <Tooltip 
+                    formatter={(value: number) => formatCurrency(value)}
+                    labelFormatter={(label) => `Layer ${label}`}
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                    }}
+                  />
+                  <Bar dataKey="totalFLRR" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Headcount by Layer */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Headcount by Layer</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={layerStats} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis type="number" fontSize={11} />
+                  <YAxis type="category" dataKey="layer" tickFormatter={(v) => `L${v}`} fontSize={11} width={30} />
+                  <Tooltip 
+                    formatter={(value: number) => [value, 'Employees']}
+                    labelFormatter={(label) => `Layer ${label}`}
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                    }}
+                  />
+                  <Bar dataKey="headcount" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Avg Tenure by Layer */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Avg Tenure by Layer</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={layerStats} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis type="number" unit=" yrs" fontSize={11} />
+                  <YAxis type="category" dataKey="layer" tickFormatter={(v) => `L${v}`} fontSize={11} width={30} />
+                  <Tooltip 
+                    formatter={(value: number) => [`${value.toFixed(1)} years`, 'Avg Tenure']}
+                    labelFormatter={(label) => `Layer ${label}`}
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                    }}
+                  />
+                  <Bar dataKey="avgTenure" fill="hsl(var(--chart-3))" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Layer Stats Summary */}
       <Card>
-        <CardHeader>
-          <CardTitle>FLRR by Organizational Layer</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Layer Breakdown</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={layerStats} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} />
-                <YAxis type="category" dataKey="layer" tickFormatter={(v) => `Layer ${v}`} />
-                <Tooltip 
-                  formatter={(value: number) => formatCurrency(value)}
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Bar dataKey="totalFLRR" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {layerStats.map((layer) => (
               <div key={layer.layer} className="p-3 rounded-lg bg-secondary/50">
-                <p className="text-sm text-muted-foreground">Layer {layer.layer}</p>
-                <p className="text-lg font-semibold">{layer.headcount} employees</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm font-medium text-primary">Layer {layer.layer}</p>
+                <p className="text-lg font-semibold">{layer.headcount}</p>
+                <p className="text-xs text-muted-foreground">
                   {layer.managers} mgrs / {layer.ics} ICs
                 </p>
               </div>
@@ -76,7 +213,7 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
         </CardContent>
       </Card>
 
-      {/* Span of Control Distribution */}
+      {/* Span of Control Distribution & Benchmark */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
@@ -136,7 +273,7 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
                   ) : (
                     <AlertTriangle className="w-3 h-3 mr-1" />
                   )}
-                  {layerStats.length} / {benchmarks.maxLayers}
+                  {orgAvgLayers} / {benchmarks.maxLayers}
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground">
@@ -152,7 +289,7 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
                 <span className="text-muted-foreground">{benchmarks.minSpan}-{benchmarks.maxSpan}</span>
               </div>
               <p className="text-sm text-muted-foreground">
-                Average span: {data.totals.avgSpan.toFixed(1)}
+                Average span: {totals.avgSpan.toFixed(1)}
               </p>
             </div>
 
@@ -186,6 +323,52 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
           </CardContent>
         </Card>
       </div>
+
+      {/* Department Spans & Layers Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Span of Control by Department</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Department</TableHead>
+                <TableHead className="text-right">Employees</TableHead>
+                <TableHead className="text-right">Managers</TableHead>
+                <TableHead className="text-right">Manager %</TableHead>
+                <TableHead className="text-right">Avg Span</TableHead>
+                <TableHead className="text-right">Layers</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {departmentSpanStats.map((dept) => (
+                <TableRow key={dept.department}>
+                  <TableCell className="font-medium">{dept.department}</TableCell>
+                  <TableCell className="text-right">{dept.totalEmployees}</TableCell>
+                  <TableCell className="text-right">{dept.managerCount}</TableCell>
+                  <TableCell className="text-right">{formatPercent(dept.managerPercent)}</TableCell>
+                  <TableCell className="text-right">
+                    <span className={dept.avgSpan < benchmarks.minSpan ? 'text-warning' : dept.avgSpan > benchmarks.maxSpan ? 'text-destructive' : 'text-success'}>
+                      {dept.avgSpan.toFixed(1)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">{dept.layers}</TableCell>
+                </TableRow>
+              ))}
+              {/* Org Average Row */}
+              <TableRow className="bg-secondary/30 font-medium">
+                <TableCell>Organization Average</TableCell>
+                <TableCell className="text-right">{totals.headcount}</TableCell>
+                <TableCell className="text-right">{totals.totalManagers}</TableCell>
+                <TableCell className="text-right">{formatPercent(totals.managerPercent)}</TableCell>
+                <TableCell className="text-right">{orgAvgSpan.toFixed(1)}</TableCell>
+                <TableCell className="text-right">{orgAvgLayers}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Single Report Managers List */}
       {outliers.singleReport.length > 0 && (

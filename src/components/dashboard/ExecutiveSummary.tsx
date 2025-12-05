@@ -3,13 +3,15 @@ import { AnalysisData } from '@/types/employee';
 import { formatCurrency, formatPercent, formatNumber } from '@/lib/analysis';
 import { MetricCard } from './MetricCard';
 import { QuickWinsPanel } from './QuickWinsPanel';
+import { DepartmentSummaryTable } from './DepartmentSummaryTable';
+import { LocationMap } from './LocationMap';
 
 interface ExecutiveSummaryProps {
   data: AnalysisData;
 }
 
 export function ExecutiveSummary({ data }: ExecutiveSummaryProps) {
-  const { totals, quickWins } = data;
+  const { totals, quickWins, departmentStats, employees } = data;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -62,6 +64,16 @@ export function ExecutiveSummary({ data }: ExecutiveSummaryProps) {
       </div>
 
       <QuickWinsPanel quickWins={quickWins} />
+
+      {/* Department Summary Table */}
+      <DepartmentSummaryTable 
+        departmentStats={departmentStats}
+        totalHeadcount={totals.headcount}
+        totalFLRR={totals.totalFLRR}
+      />
+
+      {/* Location Map */}
+      <LocationMap employees={employees} />
     </div>
   );
 }

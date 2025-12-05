@@ -4,6 +4,7 @@ import {
   LayerStats, 
   SpanStats, 
   DepartmentStats, 
+  DepartmentSpanStats,
   RoleFamilyStats, 
   TenureBand, 
   QuickWin, 
@@ -12,7 +13,7 @@ import {
 } from '@/types/employee';
 
 export const defaultBenchmarks: Benchmarks = {
-  minSpan: 4,
+  minSpan: 5,
   maxSpan: 10,
   maxLayers: 6,
   targetVariableByRole: {
@@ -61,8 +62,9 @@ export function buildOrgTree(employees: Employee[]): OrgNode | null {
     node.children.forEach(child => setLayers(child, layer + 1));
   }
 
+  // CEO is layer 0
   if (root) {
-    setLayers(root, 1);
+    setLayers(root, 0);
   }
 
   return root;
@@ -72,6 +74,7 @@ export function calculateLayerStats(employees: Employee[], orgTree: OrgNode | nu
   if (!orgTree) return [];
 
   const layerMap = new Map<number, Employee[]>();
+  const now = new Date();
 
   function traverse(node: OrgNode) {
     const emp = employees.find(e => e.employeeId === node.employeeId);
@@ -86,14 +89,24 @@ export function calculateLayerStats(employees: Employee[], orgTree: OrgNode | nu
   traverse(orgTree);
 
   return Array.from(layerMap.entries())
-    .map(([layer, emps]) => ({
-      layer,
-      headcount: emps.length,
-      totalFLRR: emps.reduce((sum, e) => sum + e.flrr, 0),
-      avgFLRR: emps.reduce((sum, e) => sum + e.flrr, 0) / emps.length,
-      managers: emps.filter(e => employees.some(emp => emp.managerId === e.employeeId)).length,
-      ics: emps.filter(e => !employees.some(emp => emp.managerId === e.employeeId)).length,
-    }))
+    .map(([layer, emps]) => {
+      // Calculate average tenure for this layer
+      const tenures = emps.map(e => {
+        const hireDate = new Date(e.hireDate);
+        return (now.getTime() - hireDate.getTime()) / (1000 * 60 * 60 * 24 * 365);
+      });
+      const avgTenure = tenures.length > 0 ? tenures.reduce((a, b) => a + b, 0) / tenures.length : 0;
+
+      return {
+        layer,
+        headcount: emps.length,
+        totalFLRR: emps.reduce((sum, e) => sum + e.flrr, 0),
+        avgFLRR: emps.reduce((sum, e) => sum + e.flrr, 0) / emps.length,
+        managers: emps.filter(e => employees.some(emp => emp.managerId === e.employeeId)).length,
+        ics: emps.filter(e => !employees.some(emp => emp.managerId === e.employeeId)).length,
+        avgTenure,
+      };
+    })
     .sort((a, b) => a.layer - b.layer);
 }
 
@@ -283,11 +296,49 @@ export function generateQuickWins(
   });
 }
 
+export function calculateDepartmentSpanStats(employees: Employee[], spanStats: SpanStats[], orgTree: OrgNode | null): DepartmentSpanStats[] {
+  if (!orgTree) return [];
+
+  const deptMap = new Map<string, { managers: SpanStats[]; employees: Employee[]; maxLayer: number }>();
+
+  // Group employees and managers by department
+  employees.forEach(emp => {
+    const existing = deptMap.get(emp.department) || { managers: [], employees: [], maxLayer: 0 };
+    existing.employees.push(emp);
+    deptMap.set(emp.department, existing);
+  });
+
+  // Add manager spans to departments
+  spanStats.forEach(span => {
+    const existing = deptMap.get(span.department);
+    if (existing) {
+      existing.managers.push(span);
+      existing.maxLayer = Math.max(existing.maxLayer, span.layer);
+    }
+  });
+
+  return Array.from(deptMap.entries()).map(([department, data]) => {
+    const avgSpan = data.managers.length > 0
+      ? data.managers.reduce((sum, m) => sum + m.directReports, 0) / data.managers.length
+      : 0;
+    
+    return {
+      department,
+      avgSpan,
+      layers: data.maxLayer + 1, // +1 because layers are 0-indexed
+      managerCount: data.managers.length,
+      totalEmployees: data.employees.length,
+      managerPercent: data.employees.length > 0 ? (data.managers.length / data.employees.length) * 100 : 0,
+    };
+  }).sort((a, b) => b.totalEmployees - a.totalEmployees);
+}
+
 export function analyzeEmployeeData(employees: Employee[], benchmarks: Benchmarks = defaultBenchmarks): AnalysisData {
   const orgTree = buildOrgTree(employees);
   const layerStats = calculateLayerStats(employees, orgTree);
   const spanStats = calculateSpanStats(employees, orgTree);
   const departmentStats = calculateDepartmentStats(employees);
+  const departmentSpanStats = calculateDepartmentSpanStats(employees, spanStats, orgTree);
   const roleFamilyStats = calculateRoleFamilyStats(employees);
   const tenureBands = calculateTenureBands(employees);
   const quickWins = generateQuickWins(employees, layerStats, spanStats, roleFamilyStats, benchmarks);
@@ -297,6 +348,9 @@ export function analyzeEmployeeData(employees: Employee[], benchmarks: Benchmark
   const bestCostCount = employees.filter(e => e.countryTag === 'Best-cost').length;
   const totalBonus = employees.reduce((sum, e) => sum + e.bonus, 0);
   const totalBase = employees.reduce((sum, e) => sum + e.baseSalary, 0);
+  
+  // CEO direct reports (layer 0 manager's direct reports)
+  const ceoDirectReports = orgTree ? orgTree.children.length : 0;
 
   return {
     employees,
@@ -304,6 +358,7 @@ export function analyzeEmployeeData(employees: Employee[], benchmarks: Benchmark
     layerStats,
     spanStats,
     departmentStats,
+    departmentSpanStats,
     roleFamilyStats,
     tenureBands,
     quickWins,
@@ -320,6 +375,9 @@ export function analyzeEmployeeData(employees: Employee[], benchmarks: Benchmark
         ? (totalBonus / (totalBase + totalBonus)) * 100 
         : 0,
       managerToICRatio: ics > 0 ? managers / ics : 0,
+      totalManagers: managers,
+      managerPercent: employees.length > 0 ? (managers / employees.length) * 100 : 0,
+      ceoDirectReports,
     },
   };
 }
