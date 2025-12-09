@@ -3,9 +3,9 @@ import {
   OrgNode, 
   LayerStats, 
   SpanStats, 
-  DepartmentStats, 
-  DepartmentSpanStats,
-  RoleFamilyStats, 
+  FunctionStats, 
+  FunctionSpanStats,
+  CountryStats,
   TenureBand, 
   QuickWin, 
   AnalysisData,
@@ -27,7 +27,7 @@ export const defaultBenchmarks: Benchmarks = {
     'HR': 10,
     'default': 15,
   },
-  bestCostRatio: 0.4, // 40% cost savings for best-cost locations
+  bestCostRatio: 0.4,
 };
 
 export function buildOrgTree(employees: Employee[]): OrgNode | null {
@@ -56,7 +56,6 @@ export function buildOrgTree(employees: Employee[]): OrgNode | null {
     }
   });
 
-  // Calculate layers
   function setLayers(node: OrgNode, layer: number) {
     node.layer = layer;
     node.children.forEach(child => setLayers(child, layer + 1));
@@ -90,7 +89,6 @@ export function calculateLayerStats(employees: Employee[], orgTree: OrgNode | nu
 
   return Array.from(layerMap.entries())
     .map(([layer, emps]) => {
-      // Calculate average tenure for this layer
       const tenures = emps.map(e => {
         const hireDate = new Date(e.hireDate);
         return (now.getTime() - hireDate.getTime()) / (1000 * 60 * 60 * 24 * 365);
@@ -119,8 +117,8 @@ export function calculateSpanStats(employees: Employee[], orgTree: OrgNode | nul
     if (node.children.length > 0) {
       spans.push({
         managerId: node.employeeId,
-        managerName: node.name,
-        department: node.department,
+        managerName: node.title, // Using title since we removed name
+        function: node.function,
         directReports: node.children.length,
         layer: node.layer,
       });
@@ -132,19 +130,19 @@ export function calculateSpanStats(employees: Employee[], orgTree: OrgNode | nul
   return spans;
 }
 
-export function calculateDepartmentStats(employees: Employee[]): DepartmentStats[] {
-  const deptMap = new Map<string, Employee[]>();
+export function calculateFunctionStats(employees: Employee[], countryTags: Map<string, 'Best-cost' | 'High-cost'>): FunctionStats[] {
+  const funcMap = new Map<string, Employee[]>();
 
   employees.forEach(emp => {
-    const existing = deptMap.get(emp.department) || [];
+    const existing = funcMap.get(emp.function) || [];
     existing.push(emp);
-    deptMap.set(emp.department, existing);
+    funcMap.set(emp.function, existing);
   });
 
-  return Array.from(deptMap.entries()).map(([department, emps]) => {
-    const bestCostCount = emps.filter(e => e.countryTag === 'Best-cost').length;
+  return Array.from(funcMap.entries()).map(([func, emps]) => {
+    const bestCostCount = emps.filter(e => countryTags.get(e.country) === 'Best-cost').length;
     return {
-      department,
+      function: func,
       headcount: emps.length,
       totalFLRR: emps.reduce((sum, e) => sum + e.flrr, 0),
       avgFLRR: emps.reduce((sum, e) => sum + e.flrr, 0) / emps.length,
@@ -155,33 +153,24 @@ export function calculateDepartmentStats(employees: Employee[]): DepartmentStats
   });
 }
 
-export function calculateRoleFamilyStats(employees: Employee[]): RoleFamilyStats[] {
-  const roleMap = new Map<string, Employee[]>();
+export function calculateCountryStats(employees: Employee[]): CountryStats[] {
+  const countryMap = new Map<string, Employee[]>();
 
   employees.forEach(emp => {
-    const existing = roleMap.get(emp.roleFamily) || [];
+    const existing = countryMap.get(emp.country) || [];
     existing.push(emp);
-    roleMap.set(emp.roleFamily, existing);
+    countryMap.set(emp.country, existing);
   });
 
-  return Array.from(roleMap.entries()).map(([roleFamily, emps]) => {
-    const totalBase = emps.reduce((sum, e) => sum + e.baseSalary, 0);
-    const totalBonus = emps.reduce((sum, e) => sum + e.bonus, 0);
-    const totalComp = totalBase + totalBonus;
-    const avgVariablePercent = totalComp > 0 ? (totalBonus / totalComp) * 100 : 0;
-    const bestCostCount = emps.filter(e => e.countryTag === 'Best-cost').length;
-
-    return {
-      roleFamily,
+  return Array.from(countryMap.entries())
+    .map(([country, emps]) => ({
+      country,
       headcount: emps.length,
       totalFLRR: emps.reduce((sum, e) => sum + e.flrr, 0),
-      totalBase,
-      totalBonus,
-      avgVariablePercent,
-      bestCostCount,
-      highCostCount: emps.length - bestCostCount,
-    };
-  });
+      avgFLRR: emps.reduce((sum, e) => sum + e.flrr, 0) / emps.length,
+      tag: 'Untagged' as const,
+    }))
+    .sort((a, b) => b.headcount - a.headcount);
 }
 
 export function calculateTenureBands(employees: Employee[]): TenureBand[] {
@@ -214,27 +203,10 @@ export function generateQuickWins(
   employees: Employee[],
   layerStats: LayerStats[],
   spanStats: SpanStats[],
-  roleFamilyStats: RoleFamilyStats[],
+  functionStats: FunctionStats[],
   benchmarks: Benchmarks = defaultBenchmarks
 ): QuickWin[] {
   const quickWins: QuickWin[] = [];
-
-  // Check offshoring opportunity
-  const highCostEmps = employees.filter(e => e.countryTag === 'High-cost');
-  const highCostPercent = (highCostEmps.length / employees.length) * 100;
-  const highCostFLRR = highCostEmps.reduce((sum, e) => sum + e.flrr, 0);
-  
-  if (highCostPercent > 50) {
-    const potentialSavings = highCostFLRR * benchmarks.bestCostRatio;
-    quickWins.push({
-      id: 'offshoring-1',
-      title: 'High-Cost Location Concentration',
-      description: `${highCostPercent.toFixed(0)}% of headcount (${highCostEmps.length} employees) is in high-cost locations. Potential FLRR savings of $${(potentialSavings / 1000000).toFixed(1)}M if shifted to best-cost.`,
-      impact: 'high',
-      category: 'offshoring',
-      metric: `$${(potentialSavings / 1000000).toFixed(1)}M potential savings`,
-    });
-  }
 
   // Check for single-report managers
   const singleReportManagers = spanStats.filter(s => s.directReports === 1);
@@ -276,16 +248,21 @@ export function generateQuickWins(
   }
 
   // Check variable compensation alignment
-  roleFamilyStats.forEach(role => {
-    const target = benchmarks.targetVariableByRole[role.roleFamily] || benchmarks.targetVariableByRole['default'];
-    if (role.avgVariablePercent < target * 0.5) {
+  functionStats.forEach(func => {
+    const target = benchmarks.targetVariableByRole[func.function] || benchmarks.targetVariableByRole['default'];
+    const totalBase = employees.filter(e => e.function === func.function).reduce((sum, e) => sum + e.baseSalary, 0);
+    const totalBonus = employees.filter(e => e.function === func.function).reduce((sum, e) => sum + e.bonus, 0);
+    const totalComp = totalBase + totalBonus;
+    const avgVariable = totalComp > 0 ? (totalBonus / totalComp) * 100 : 0;
+    
+    if (avgVariable < target * 0.5) {
       quickWins.push({
-        id: `comp-${role.roleFamily}`,
-        title: `Low Variable Comp: ${role.roleFamily}`,
-        description: `${role.roleFamily} roles average ${role.avgVariablePercent.toFixed(0)}% variable compensation. Target is ${target}%.`,
-        impact: role.roleFamily === 'Sales' ? 'high' : 'medium',
+        id: `comp-${func.function}`,
+        title: `Low Variable Comp: ${func.function}`,
+        description: `${func.function} roles average ${avgVariable.toFixed(0)}% variable compensation. Target is ${target}%.`,
+        impact: func.function === 'Sales' ? 'high' : 'medium',
         category: 'compensation',
-        metric: `${(target - role.avgVariablePercent).toFixed(0)}pp gap`,
+        metric: `${(target - avgVariable).toFixed(0)}pp gap`,
       });
     }
   });
@@ -296,36 +273,34 @@ export function generateQuickWins(
   });
 }
 
-export function calculateDepartmentSpanStats(employees: Employee[], spanStats: SpanStats[], orgTree: OrgNode | null): DepartmentSpanStats[] {
+export function calculateFunctionSpanStats(employees: Employee[], spanStats: SpanStats[], orgTree: OrgNode | null): FunctionSpanStats[] {
   if (!orgTree) return [];
 
-  const deptMap = new Map<string, { managers: SpanStats[]; employees: Employee[]; maxLayer: number }>();
+  const funcMap = new Map<string, { managers: SpanStats[]; employees: Employee[]; maxLayer: number }>();
 
-  // Group employees and managers by department
   employees.forEach(emp => {
-    const existing = deptMap.get(emp.department) || { managers: [], employees: [], maxLayer: 0 };
+    const existing = funcMap.get(emp.function) || { managers: [], employees: [], maxLayer: 0 };
     existing.employees.push(emp);
-    deptMap.set(emp.department, existing);
+    funcMap.set(emp.function, existing);
   });
 
-  // Add manager spans to departments
   spanStats.forEach(span => {
-    const existing = deptMap.get(span.department);
+    const existing = funcMap.get(span.function);
     if (existing) {
       existing.managers.push(span);
       existing.maxLayer = Math.max(existing.maxLayer, span.layer);
     }
   });
 
-  return Array.from(deptMap.entries()).map(([department, data]) => {
+  return Array.from(funcMap.entries()).map(([func, data]) => {
     const avgSpan = data.managers.length > 0
       ? data.managers.reduce((sum, m) => sum + m.directReports, 0) / data.managers.length
       : 0;
     
     return {
-      department,
+      function: func,
       avgSpan,
-      layers: data.maxLayer + 1, // +1 because layers are 0-indexed
+      layers: data.maxLayer + 1,
       managerCount: data.managers.length,
       totalEmployees: data.employees.length,
       managerPercent: data.employees.length > 0 ? (data.managers.length / data.employees.length) * 100 : 0,
@@ -337,19 +312,22 @@ export function analyzeEmployeeData(employees: Employee[], benchmarks: Benchmark
   const orgTree = buildOrgTree(employees);
   const layerStats = calculateLayerStats(employees, orgTree);
   const spanStats = calculateSpanStats(employees, orgTree);
-  const departmentStats = calculateDepartmentStats(employees);
-  const departmentSpanStats = calculateDepartmentSpanStats(employees, spanStats, orgTree);
-  const roleFamilyStats = calculateRoleFamilyStats(employees);
+  const countryStats = calculateCountryStats(employees);
+  
+  // Create default country tags (all untagged initially)
+  const countryTags = new Map<string, 'Best-cost' | 'High-cost'>();
+  
+  const functionStats = calculateFunctionStats(employees, countryTags);
+  const functionSpanStats = calculateFunctionSpanStats(employees, spanStats, orgTree);
   const tenureBands = calculateTenureBands(employees);
-  const quickWins = generateQuickWins(employees, layerStats, spanStats, roleFamilyStats, benchmarks);
+  const quickWins = generateQuickWins(employees, layerStats, spanStats, functionStats, benchmarks);
 
   const managers = spanStats.length;
   const ics = employees.length - managers;
-  const bestCostCount = employees.filter(e => e.countryTag === 'Best-cost').length;
+  const bestCostCount = employees.filter(e => countryTags.get(e.country) === 'Best-cost').length;
   const totalBonus = employees.reduce((sum, e) => sum + e.bonus, 0);
   const totalBase = employees.reduce((sum, e) => sum + e.baseSalary, 0);
   
-  // CEO direct reports (layer 0 manager's direct reports)
   const ceoDirectReports = orgTree ? orgTree.children.length : 0;
 
   return {
@@ -357,9 +335,9 @@ export function analyzeEmployeeData(employees: Employee[], benchmarks: Benchmark
     orgTree,
     layerStats,
     spanStats,
-    departmentStats,
-    departmentSpanStats,
-    roleFamilyStats,
+    functionStats,
+    functionSpanStats,
+    countryStats,
     tenureBands,
     quickWins,
     totals: {

@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { parseExcelFile, readFileHeaders, autoDetectColumns, ColumnMapping, fieldLabels, requiredFields, importantFields } from '@/lib/excel-parser';
+import { parseExcelFile, readFileHeaders, autoDetectColumns, ColumnMapping, fieldLabels, importantFields } from '@/lib/excel-parser';
 import { Employee } from '@/types/employee';
 import { ColumnMappingModal } from './ColumnMappingModal';
 
@@ -19,7 +19,6 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
   
-  // Column mapping state
   const [fileHeaders, setFileHeaders] = useState<string[]>([]);
   const [detectedMapping, setDetectedMapping] = useState<ColumnMapping | null>(null);
   const [showMappingModal, setShowMappingModal] = useState(false);
@@ -38,30 +37,15 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
     setCurrentFile(file);
 
     try {
-      // Read headers and auto-detect mapping
       const headers = await readFileHeaders(file);
       setFileHeaders(headers);
       
       const mapping = autoDetectColumns(headers);
       setDetectedMapping(mapping);
       
-      // Check for missing required columns
-      const missingRequired = requiredFields.filter(f => !mapping[f]);
-      const missingImportant = importantFields.filter(f => !mapping[f]);
-      
-      if (missingRequired.length > 0) {
-        // Show mapping modal for user to manually map
-        setShowMappingModal(true);
-        setIsLoading(false);
-      } else if (missingImportant.length > 0) {
-        // Show mapping summary with option to edit
-        setShowMappingModal(true);
-        setIsLoading(false);
-      } else {
-        // All good, process directly but show mapping summary
-        setShowMappingModal(true);
-        setIsLoading(false);
-      }
+      // Always show mapping modal to let user review/adjust
+      setShowMappingModal(true);
+      setIsLoading(false);
     } catch (error) {
       setErrors([error instanceof Error ? error.message : 'Failed to parse file']);
       setIsLoading(false);
@@ -116,10 +100,9 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
     if (!detectedMapping) return null;
     
     const mapped = (Object.keys(detectedMapping) as (keyof ColumnMapping)[]).filter(k => detectedMapping[k]);
-    const missingRequired = requiredFields.filter(f => !detectedMapping[f]);
     const missingImportant = importantFields.filter(f => !detectedMapping[f]);
     
-    return { mapped, missingRequired, missingImportant };
+    return { mapped, missingImportant };
   };
 
   const summary = getMappingSummary();
@@ -192,7 +175,6 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
           </div>
         )}
 
-        {/* Mapping Summary */}
         {fileName && summary && !showMappingModal && (
           <Card className="bg-secondary/30">
             <CardContent className="p-4">
@@ -210,15 +192,9 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
                     {fieldLabels[field]}
                   </Badge>
                 ))}
-                {summary.missingRequired.map(field => (
-                  <Badge key={field} variant="destructive">
-                    <AlertCircle className="w-3 h-3 mr-1" />
-                    {fieldLabels[field]}
-                  </Badge>
-                ))}
                 {summary.missingImportant.map(field => (
                   <Badge key={field} variant="secondary" className="bg-warning/20 text-warning">
-                    {fieldLabels[field]}
+                    {fieldLabels[field]} (missing)
                   </Badge>
                 ))}
               </div>
@@ -255,16 +231,24 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
         <Card className="bg-secondary/50">
           <CardContent className="p-6">
             <h3 className="font-medium mb-3 text-foreground">
-              The tool will automatically detect and map your columns. You can also manually adjust the mapping after uploading.
+              Upload a census file that only has 1 tab
             </h3>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground mb-2">
+              The tool will automatically detect and map your columns. You can also manually adjust the mapping after uploading.
+            </p>
+            <p className="text-sm text-muted-foreground mb-2">
               Supported formats: .xlsx, .xls, .csv
+            </p>
+            <p className="text-sm text-muted-foreground">
+              For any suggestions or questions, please reach out to{' '}
+              <a href="mailto:rdsp@kkr.com" className="text-primary hover:underline">
+                rdsp@kkr.com
+              </a>
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Column Mapping Modal */}
       {detectedMapping && (
         <ColumnMappingModal
           open={showMappingModal}

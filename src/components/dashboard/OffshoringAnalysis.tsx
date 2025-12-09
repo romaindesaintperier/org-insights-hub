@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Slider } from '@/components/ui/slider';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { AnalysisData } from '@/types/employee';
+import { AnalysisData, CountryStats } from '@/types/employee';
 import { formatCurrency, formatPercent } from '@/lib/analysis';
-import { Globe, TrendingDown, DollarSign } from 'lucide-react';
+import { Globe, DollarSign, AlertTriangle, Calculator, Scissors } from 'lucide-react';
 
 interface OffshoringAnalysisProps {
   data: AnalysisData;
@@ -13,49 +16,169 @@ interface OffshoringAnalysisProps {
 const COLORS = {
   bestCost: 'hsl(var(--success))',
   highCost: 'hsl(var(--chart-1))',
+  untagged: 'hsl(var(--muted-foreground))',
 };
 
-export function OffshoringAnalysis({ data }: OffshoringAnalysisProps) {
-  const [savingsRatio, setSavingsRatio] = useState(40);
-  const { employees, roleFamilyStats, departmentStats } = data;
+// Top 20 roles typically suitable for offshoring based on industry research
+const OFFSHORING_ROLES = [
+  { title: 'Software Developer', reason: 'Highly standardized work, strong global talent pool' },
+  { title: 'Customer Service Representative', reason: 'Process-driven, multilingual talent available' },
+  { title: 'Data Entry Specialist', reason: 'Routine, transaction-based tasks' },
+  { title: 'Accountant', reason: 'Standardized processes, time-zone advantages' },
+  { title: 'IT Support Specialist', reason: 'Remote support capabilities, 24/7 coverage' },
+  { title: 'Quality Assurance Analyst', reason: 'Testing can be done remotely' },
+  { title: 'Financial Analyst', reason: 'Analytical work with clear deliverables' },
+  { title: 'HR Administrator', reason: 'Transactional HR processes' },
+  { title: 'Graphic Designer', reason: 'Creative work with clear briefs' },
+  { title: 'Technical Writer', reason: 'Documentation can be standardized' },
+  { title: 'Marketing Coordinator', reason: 'Digital marketing tasks' },
+  { title: 'Payroll Specialist', reason: 'Routine processing tasks' },
+  { title: 'Business Analyst', reason: 'Requirements gathering and documentation' },
+  { title: 'Database Administrator', reason: 'Remote management capabilities' },
+  { title: 'Network Engineer', reason: 'Remote monitoring and maintenance' },
+  { title: 'Content Writer', reason: 'Clear deliverables, global talent' },
+  { title: 'Procurement Specialist', reason: 'Transaction-based work' },
+  { title: 'Claims Processor', reason: 'Standardized processes' },
+  { title: 'Research Analyst', reason: 'Desk research and analysis' },
+  { title: 'Compliance Analyst', reason: 'Documentation and monitoring' },
+];
 
-  const bestCostCount = employees.filter(e => e.countryTag === 'Best-cost').length;
-  const highCostCount = employees.length - bestCostCount;
-  const bestCostFLRR = employees.filter(e => e.countryTag === 'Best-cost').reduce((sum, e) => sum + e.flrr, 0);
-  const highCostFLRR = employees.filter(e => e.countryTag === 'High-cost').reduce((sum, e) => sum + e.flrr, 0);
+export function OffshoringAnalysis({ data }: OffshoringAnalysisProps) {
+  const { employees, countryStats } = data;
+
+  // BCC FLRR assumption (default $40k)
+  const [bccFLRRAssumption, setBccFLRRAssumption] = useState(40000);
+
+  // Country tags state
+  const [countryTags, setCountryTags] = useState<Map<string, 'Best-cost' | 'High-cost'>>(
+    new Map()
+  );
+
+  // Function offshoring potentials (user inputs)
+  const [functionOffshoringPotentials, setFunctionOffshoringPotentials] = useState<Record<string, number>>({});
+
+  // Calculate updated country stats with tags
+  const taggedCountryStats = useMemo(() => {
+    return countryStats.map(cs => ({
+      ...cs,
+      tag: countryTags.get(cs.country) || 'Untagged' as const,
+    }));
+  }, [countryStats, countryTags]);
+
+  // Calculate function-level offshoring stats
+  const functionOffshoringStats = useMemo(() => {
+    const funcMap = new Map<string, {
+      employees: typeof employees;
+      bccHeadcount: number;
+      hccHeadcount: number;
+      bccFLRR: number;
+      hccFLRR: number;
+    }>();
+
+    employees.forEach(emp => {
+      const existing = funcMap.get(emp.function) || {
+        employees: [],
+        bccHeadcount: 0,
+        hccHeadcount: 0,
+        bccFLRR: 0,
+        hccFLRR: 0,
+      };
+      existing.employees.push(emp);
+      
+      const tag = countryTags.get(emp.country);
+      if (tag === 'Best-cost') {
+        existing.bccHeadcount++;
+        existing.bccFLRR += emp.flrr;
+      } else if (tag === 'High-cost') {
+        existing.hccHeadcount++;
+        existing.hccFLRR += emp.flrr;
+      }
+      
+      funcMap.set(emp.function, existing);
+    });
+
+    return Array.from(funcMap.entries()).map(([func, stats]) => {
+      const totalHeadcount = stats.employees.length;
+      const avgFLRR = stats.employees.reduce((sum, e) => sum + e.flrr, 0) / totalHeadcount;
+      const offshoringPotential = functionOffshoringPotentials[func] || 0;
+      
+      // Calculate potential savings
+      // offshoring potential % * HCC headcount * (avg HCC FLRR - BCC assumption)
+      const avgHccFLRR = stats.hccHeadcount > 0 ? stats.hccFLRR / stats.hccHeadcount : 0;
+      const headcountToOffshore = Math.round(stats.hccHeadcount * (offshoringPotential / 100));
+      const potentialSavings = headcountToOffshore * (avgHccFLRR - bccFLRRAssumption);
+
+      return {
+        function: func,
+        totalHeadcount,
+        bccHeadcount: stats.bccHeadcount,
+        hccHeadcount: stats.hccHeadcount,
+        bccPercent: totalHeadcount > 0 ? (stats.bccHeadcount / totalHeadcount) * 100 : 0,
+        hccPercent: totalHeadcount > 0 ? (stats.hccHeadcount / totalHeadcount) * 100 : 0,
+        avgFLRR,
+        bccFLRR: stats.bccFLRR,
+        hccFLRR: stats.hccFLRR,
+        offshoringPotential,
+        potentialSavings: potentialSavings > 0 ? potentialSavings : 0,
+        headcountToOffshore,
+      };
+    }).sort((a, b) => b.hccHeadcount - a.hccHeadcount);
+  }, [employees, countryTags, functionOffshoringPotentials, bccFLRRAssumption]);
+
+  // Calculate totals
+  const totals = useMemo(() => {
+    const bccCount = employees.filter(e => countryTags.get(e.country) === 'Best-cost').length;
+    const hccCount = employees.filter(e => countryTags.get(e.country) === 'High-cost').length;
+    const bccFLRR = employees.filter(e => countryTags.get(e.country) === 'Best-cost').reduce((sum, e) => sum + e.flrr, 0);
+    const hccFLRR = employees.filter(e => countryTags.get(e.country) === 'High-cost').reduce((sum, e) => sum + e.flrr, 0);
+    const totalPotentialSavings = functionOffshoringStats.reduce((sum, f) => sum + f.potentialSavings, 0);
+    const totalHeadcountToOffshore = functionOffshoringStats.reduce((sum, f) => sum + f.headcountToOffshore, 0);
+    
+    // Severance = 25% of FLRR for HCC headcount to be offshored
+    const avgHccFLRR = hccCount > 0 ? hccFLRR / hccCount : 0;
+    const severanceCost = totalHeadcountToOffshore * avgHccFLRR * 0.25;
+
+    return { bccCount, hccCount, bccFLRR, hccFLRR, totalPotentialSavings, severanceCost, totalHeadcountToOffshore };
+  }, [employees, countryTags, functionOffshoringStats]);
+
+  const handleCountryTagChange = (country: string, tag: 'Best-cost' | 'High-cost' | 'Untagged') => {
+    setCountryTags(prev => {
+      const next = new Map(prev);
+      if (tag === 'Untagged') {
+        next.delete(country);
+      } else {
+        next.set(country, tag);
+      }
+      return next;
+    });
+  };
+
+  const handleOffshoringPotentialChange = (func: string, value: string) => {
+    const numValue = Math.min(100, Math.max(0, parseInt(value) || 0));
+    setFunctionOffshoringPotentials(prev => ({
+      ...prev,
+      [func]: numValue,
+    }));
+  };
 
   const pieData = [
-    { name: 'Best-cost', value: bestCostCount, flrr: bestCostFLRR },
-    { name: 'High-cost', value: highCostCount, flrr: highCostFLRR },
-  ];
-
-  const roleOpportunities = roleFamilyStats
-    .map(role => ({
-      ...role,
-      highCostFLRR: employees
-        .filter(e => e.roleFamily === role.roleFamily && e.countryTag === 'High-cost')
-        .reduce((sum, e) => sum + e.flrr, 0),
-      potentialSavings: employees
-        .filter(e => e.roleFamily === role.roleFamily && e.countryTag === 'High-cost')
-        .reduce((sum, e) => sum + e.flrr, 0) * (savingsRatio / 100),
-    }))
-    .filter(r => r.highCostCount > 0)
-    .sort((a, b) => b.potentialSavings - a.potentialSavings);
-
-  const totalPotentialSavings = highCostFLRR * (savingsRatio / 100);
+    { name: 'Best-cost', value: totals.bccCount, flrr: totals.bccFLRR },
+    { name: 'High-cost', value: totals.hccCount, flrr: totals.hccFLRR },
+    { name: 'Untagged', value: employees.length - totals.bccCount - totals.hccCount, flrr: 0 },
+  ].filter(d => d.value > 0);
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-success/10 border-success/30">
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
               <Globe className="w-8 h-8 text-success" />
               <div>
-                <p className="text-sm text-muted-foreground">Best-Cost Locations</p>
-                <p className="text-2xl font-bold">{bestCostCount}</p>
-                <p className="text-sm text-muted-foreground">{formatCurrency(bestCostFLRR)} FLRR</p>
+                <p className="text-sm text-muted-foreground">Best-Cost Countries</p>
+                <p className="text-2xl font-bold">{totals.bccCount}</p>
+                <p className="text-sm text-muted-foreground">{formatCurrency(totals.bccFLRR)} FLRR</p>
               </div>
             </div>
           </CardContent>
@@ -66,9 +189,9 @@ export function OffshoringAnalysis({ data }: OffshoringAnalysisProps) {
             <div className="flex items-center gap-3">
               <Globe className="w-8 h-8 text-primary" />
               <div>
-                <p className="text-sm text-muted-foreground">High-Cost Locations</p>
-                <p className="text-2xl font-bold">{highCostCount}</p>
-                <p className="text-sm text-muted-foreground">{formatCurrency(highCostFLRR)} FLRR</p>
+                <p className="text-sm text-muted-foreground">High-Cost Countries</p>
+                <p className="text-2xl font-bold">{totals.hccCount}</p>
+                <p className="text-sm text-muted-foreground">{formatCurrency(totals.hccFLRR)} FLRR</p>
               </div>
             </div>
           </CardContent>
@@ -77,54 +200,99 @@ export function OffshoringAnalysis({ data }: OffshoringAnalysisProps) {
         <Card className="gradient-aubergine text-primary-foreground">
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <TrendingDown className="w-8 h-8" />
+              <Calculator className="w-8 h-8" />
               <div>
-                <p className="text-sm opacity-80">Potential Savings</p>
-                <p className="text-2xl font-bold">{formatCurrency(totalPotentialSavings)}</p>
-                <p className="text-sm opacity-80">at {savingsRatio}% cost reduction</p>
+                <p className="text-sm opacity-80">Potential Run-Rate Savings</p>
+                <p className="text-2xl font-bold">{formatCurrency(totals.totalPotentialSavings)}</p>
+                <p className="text-sm opacity-80">{totals.totalHeadcountToOffshore} roles</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-warning/30 bg-warning/5">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-3">
+              <Scissors className="w-8 h-8 text-warning" />
+              <div>
+                <p className="text-sm text-muted-foreground">Est. Severance Cost</p>
+                <p className="text-2xl font-bold">{formatCurrency(totals.severanceCost)}</p>
+                <p className="text-sm text-muted-foreground">25% of offshored FLRR</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Savings Calculator */}
+      {/* BCC FLRR Assumption Input */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
             <DollarSign className="w-5 h-5" />
-            Savings Calculator
+            Best-Cost Country FLRR Assumption
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Best-cost savings assumption</span>
-              <span className="font-medium">{savingsRatio}%</span>
+        <CardContent>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">FLRR per headcount in BCC:</span>
+              <div className="relative w-32">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  value={bccFLRRAssumption}
+                  onChange={(e) => setBccFLRRAssumption(parseInt(e.target.value) || 0)}
+                  className="pl-7"
+                />
+              </div>
             </div>
-            <Slider
-              value={[savingsRatio]}
-              onValueChange={(v) => setSavingsRatio(v[0])}
-              min={20}
-              max={60}
-              step={5}
-              className="w-full"
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>20%</span>
-              <span>60%</span>
-            </div>
+            <p className="text-sm text-muted-foreground">
+              This assumption is used to calculate potential savings when shifting headcount from HCC to BCC.
+            </p>
           </div>
+        </CardContent>
+      </Card>
 
-          <div className="p-4 rounded-lg bg-secondary/50">
-            <p className="text-sm text-muted-foreground mb-1">
-              If all high-cost roles were moved to best-cost locations:
-            </p>
-            <p className="text-3xl font-bold text-primary">
-              {formatCurrency(totalPotentialSavings)}
-            </p>
-            <p className="text-sm text-muted-foreground">annual FLRR savings</p>
-          </div>
+      {/* Country Tagging Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Country Summary & Tagging</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Country</TableHead>
+                <TableHead className="text-right"># Headcount</TableHead>
+                <TableHead className="text-right">Avg FLRR</TableHead>
+                <TableHead className="text-center">Cost Tag</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {taggedCountryStats.map((cs) => (
+                <TableRow key={cs.country}>
+                  <TableCell className="font-medium">{cs.country}</TableCell>
+                  <TableCell className="text-right">{cs.headcount}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(cs.avgFLRR)}</TableCell>
+                  <TableCell>
+                    <Select
+                      value={countryTags.get(cs.country) || 'Untagged'}
+                      onValueChange={(value) => handleCountryTagChange(cs.country, value as any)}
+                    >
+                      <SelectTrigger className="w-[140px] mx-auto">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Untagged">Untagged</SelectItem>
+                        <SelectItem value="Best-cost">Best-Cost</SelectItem>
+                        <SelectItem value="High-cost">High-Cost</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
@@ -132,7 +300,7 @@ export function OffshoringAnalysis({ data }: OffshoringAnalysisProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Headcount Distribution</CardTitle>
+            <CardTitle>Headcount by Cost Type</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[250px]">
@@ -148,8 +316,12 @@ export function OffshoringAnalysis({ data }: OffshoringAnalysisProps) {
                     innerRadius={50}
                     label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                   >
-                    <Cell fill={COLORS.bestCost} />
-                    <Cell fill={COLORS.highCost} />
+                    {pieData.map((entry, index) => (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={entry.name === 'Best-cost' ? COLORS.bestCost : entry.name === 'High-cost' ? COLORS.highCost : COLORS.untagged} 
+                      />
+                    ))}
                   </Pie>
                   <Tooltip 
                     formatter={(value: number, name: string, props: any) => [
@@ -174,21 +346,25 @@ export function OffshoringAnalysis({ data }: OffshoringAnalysisProps) {
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.highCost }} />
                 High-cost
               </span>
+              <span className="flex items-center gap-2 text-sm">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.untagged }} />
+                Untagged
+              </span>
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Best-Cost Penetration by Department</CardTitle>
+            <CardTitle>BCC Penetration by Function</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[250px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={departmentStats.slice(0, 8)} layout="vertical">
+                <BarChart data={functionOffshoringStats.slice(0, 8)} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                  <YAxis type="category" dataKey="department" width={100} tick={{ fontSize: 12 }} />
+                  <YAxis type="category" dataKey="function" width={100} tick={{ fontSize: 12 }} />
                   <Tooltip 
                     formatter={(value: number) => `${value.toFixed(1)}%`}
                     contentStyle={{ 
@@ -197,7 +373,7 @@ export function OffshoringAnalysis({ data }: OffshoringAnalysisProps) {
                       borderRadius: '8px',
                     }}
                   />
-                  <Bar dataKey="bestCostPercent" fill="hsl(var(--success))" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="bccPercent" fill="hsl(var(--success))" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -205,43 +381,92 @@ export function OffshoringAnalysis({ data }: OffshoringAnalysisProps) {
         </Card>
       </div>
 
-      {/* Opportunity by Role Family */}
+      {/* Function Offshoring Analysis Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Offshoring Opportunity by Role Family</CardTitle>
+          <CardTitle>Offshoring Opportunity by Function</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-medium">Role Family</th>
-                  <th className="text-right py-3 px-4 font-medium">Total HC</th>
-                  <th className="text-right py-3 px-4 font-medium">High-Cost HC</th>
-                  <th className="text-right py-3 px-4 font-medium">High-Cost FLRR</th>
-                  <th className="text-right py-3 px-4 font-medium">Potential Savings</th>
-                  <th className="text-right py-3 px-4 font-medium">Best-Cost %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {roleOpportunities.map((role) => (
-                  <tr key={role.roleFamily} className="border-b hover:bg-secondary/30">
-                    <td className="py-3 px-4 font-medium">{role.roleFamily}</td>
-                    <td className="py-3 px-4 text-right">{role.headcount}</td>
-                    <td className="py-3 px-4 text-right">{role.highCostCount}</td>
-                    <td className="py-3 px-4 text-right">{formatCurrency(role.highCostFLRR)}</td>
-                    <td className="py-3 px-4 text-right font-medium text-primary">
-                      {formatCurrency(role.potentialSavings)}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <span className={role.bestCostCount / role.headcount > 0.4 ? 'text-success' : 'text-muted-foreground'}>
-                        {formatPercent((role.bestCostCount / role.headcount) * 100)}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Function</TableHead>
+                  <TableHead className="text-right">Total HC</TableHead>
+                  <TableHead className="text-right">BCC %</TableHead>
+                  <TableHead className="text-right">HCC %</TableHead>
+                  <TableHead className="text-right">Avg FLRR</TableHead>
+                  <TableHead className="text-center">Offshoring %</TableHead>
+                  <TableHead className="text-right">Potential Savings</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {functionOffshoringStats.map((func) => (
+                  <TableRow key={func.function}>
+                    <TableCell className="font-medium">{func.function}</TableCell>
+                    <TableCell className="text-right">{func.totalHeadcount}</TableCell>
+                    <TableCell className="text-right">
+                      <span className={func.bccPercent > 40 ? 'text-success' : ''}>
+                        {formatPercent(func.bccPercent)}
                       </span>
-                    </td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={func.hccPercent > 60 ? 'text-warning' : ''}>
+                        {formatPercent(func.hccPercent)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">{formatCurrency(func.avgFLRR)}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-center">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={func.offshoringPotential}
+                          onChange={(e) => handleOffshoringPotentialChange(func.function, e.target.value)}
+                          className="w-20 text-center"
+                          placeholder="0"
+                        />
+                        <span className="ml-1 text-muted-foreground">%</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-medium text-primary">
+                      {formatCurrency(func.potentialSavings)}
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Top Offshoring Roles */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-primary" />
+            Top 20 Job Titles with Offshoring Potential
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            Based on industry research and best practices, the following roles are typically suitable for offshoring to lower-cost countries:
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {OFFSHORING_ROLES.map((role, index) => (
+              <div key={role.title} className="p-3 rounded-lg border bg-card hover:bg-secondary/30 transition-colors">
+                <div className="flex items-start gap-3">
+                  <Badge variant="secondary" className="text-xs shrink-0">
+                    #{index + 1}
+                  </Badge>
+                  <div>
+                    <p className="font-medium text-sm">{role.title}</p>
+                    <p className="text-xs text-muted-foreground">{role.reason}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

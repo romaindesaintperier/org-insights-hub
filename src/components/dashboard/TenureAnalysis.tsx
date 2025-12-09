@@ -1,57 +1,137 @@
+import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { AnalysisData } from '@/types/employee';
 import { formatCurrency } from '@/lib/analysis';
-import { Clock, AlertTriangle, Users } from 'lucide-react';
+import { Clock, Users, TrendingUp } from 'lucide-react';
 
 interface TenureAnalysisProps {
   data: AnalysisData;
 }
 
 const TENURE_COLORS = [
-  'hsl(var(--destructive))',
-  'hsl(var(--warning))',
+  'hsl(var(--chart-1))',
   'hsl(var(--chart-2))',
+  'hsl(var(--chart-3))',
   'hsl(var(--success))',
 ];
 
+// Generate distinct colors for functions
+const FUNCTION_COLORS = [
+  'hsl(var(--primary))',
+  'hsl(var(--chart-1))',
+  'hsl(var(--chart-2))',
+  'hsl(var(--chart-3))',
+  'hsl(var(--chart-4))',
+  'hsl(var(--chart-5))',
+  'hsl(var(--success))',
+  'hsl(var(--warning))',
+  'hsl(var(--destructive))',
+  'hsl(var(--accent))',
+];
+
 export function TenureAnalysis({ data }: TenureAnalysisProps) {
-  const { employees, tenureBands, departmentStats } = data;
+  const { employees, tenureBands, functionStats } = data;
   const now = new Date();
 
   // Calculate tenure for each employee
-  const employeesWithTenure = employees.map(emp => {
-    const hireDate = new Date(emp.hireDate);
-    const years = (now.getTime() - hireDate.getTime()) / (1000 * 60 * 60 * 24 * 365);
-    return { ...emp, tenureYears: years };
-  });
+  const employeesWithTenure = useMemo(() => {
+    return employees.map(emp => {
+      const hireDate = new Date(emp.hireDate);
+      const years = (now.getTime() - hireDate.getTime()) / (1000 * 60 * 60 * 24 * 365);
+      return { ...emp, tenureYears: years };
+    });
+  }, [employees, now]);
 
-  // Flight risk: <1 year tenure
-  const flightRisk = employeesWithTenure
-    .filter(e => e.tenureYears < 1)
-    .sort((a, b) => b.flrr - a.flrr);
+  // Recent joiners (< 1 year tenure)
+  const recentJoiners = useMemo(() => {
+    return employeesWithTenure
+      .filter(e => e.tenureYears < 1)
+      .sort((a, b) => b.flrr - a.flrr);
+  }, [employeesWithTenure]);
 
-  // Institutional knowledge concentration: >5 years
-  const knowledgeConcentration = employeesWithTenure
-    .filter(e => e.tenureYears >= 5)
-    .sort((a, b) => b.tenureYears - a.tenureYears);
+  // Average tenure by function
+  const tenureByFunction = useMemo(() => {
+    return functionStats.map(func => {
+      const funcEmps = employeesWithTenure.filter(e => e.function === func.function);
+      const avgTenure = funcEmps.reduce((sum, e) => sum + e.tenureYears, 0) / funcEmps.length;
+      return {
+        function: func.function,
+        avgTenure,
+        headcount: func.headcount,
+      };
+    }).sort((a, b) => b.avgTenure - a.avgTenure);
+  }, [employeesWithTenure, functionStats]);
 
-  // Tenure by department
-  const tenureByDept = departmentStats.map(dept => {
-    const deptEmployees = employeesWithTenure.filter(e => e.department === dept.department);
-    const avgTenure = deptEmployees.reduce((sum, e) => sum + e.tenureYears, 0) / deptEmployees.length;
-    const newHires = deptEmployees.filter(e => e.tenureYears < 1).length;
-    const veterans = deptEmployees.filter(e => e.tenureYears >= 5).length;
+  // Hiring by quarter (last 20 quarters)
+  const hiringByQuarter = useMemo(() => {
+    const quarters: { quarter: string; date: Date; hires: Record<string, number>; total: number }[] = [];
+    const today = new Date();
+    
+    // Generate last 20 quarters
+    for (let i = 19; i >= 0; i--) {
+      const quarterDate = new Date(today);
+      quarterDate.setMonth(today.getMonth() - (i * 3));
+      const year = quarterDate.getFullYear();
+      const q = Math.floor(quarterDate.getMonth() / 3) + 1;
+      quarters.push({
+        quarter: `Q${q} ${year}`,
+        date: new Date(year, (q - 1) * 3, 1),
+        hires: {},
+        total: 0,
+      });
+    }
+
+    // Get unique functions for coloring
+    const functions = [...new Set(employees.map(e => e.function))];
+
+    // Count hires per quarter per function
+    employees.forEach(emp => {
+      const hireDate = new Date(emp.hireDate);
+      
+      quarters.forEach(q => {
+        const quarterEnd = new Date(q.date);
+        quarterEnd.setMonth(quarterEnd.getMonth() + 3);
+        
+        if (hireDate >= q.date && hireDate < quarterEnd) {
+          q.hires[emp.function] = (q.hires[emp.function] || 0) + 1;
+          q.total++;
+        }
+      });
+    });
+
+    // Convert to chart format
     return {
-      department: dept.department,
-      avgTenure,
-      headcount: dept.headcount,
-      newHires,
-      veterans,
-      newHirePercent: (newHires / dept.headcount) * 100,
+      data: quarters.map(q => ({
+        quarter: q.quarter,
+        ...q.hires,
+        total: q.total,
+      })),
+      functions,
     };
-  }).sort((a, b) => b.newHirePercent - a.newHirePercent);
+  }, [employees]);
+
+  // Tenure by function for chart
+  const tenureByFunctionData = useMemo(() => {
+    return functionStats.map(func => {
+      const funcEmps = employeesWithTenure.filter(e => e.function === func.function);
+      const newHires = funcEmps.filter(e => e.tenureYears < 1).length;
+      const veterans = funcEmps.filter(e => e.tenureYears >= 5).length;
+      const avgTenure = funcEmps.reduce((sum, e) => sum + e.tenureYears, 0) / funcEmps.length;
+      return {
+        function: func.function,
+        avgTenure,
+        headcount: func.headcount,
+        newHires,
+        veterans,
+        newHirePercent: (newHires / func.headcount) * 100,
+      };
+    }).sort((a, b) => b.newHirePercent - a.newHirePercent);
+  }, [employeesWithTenure, functionStats]);
+
+  const avgTenure = employeesWithTenure.reduce((sum, e) => sum + e.tenureYears, 0) / employees.length;
+  const veterans = employeesWithTenure.filter(e => e.tenureYears >= 5);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -63,38 +143,36 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
               <Clock className="w-8 h-8 text-primary" />
               <div>
                 <p className="text-sm text-muted-foreground">Avg Tenure</p>
-                <p className="text-2xl font-bold">
-                  {(employeesWithTenure.reduce((sum, e) => sum + e.tenureYears, 0) / employees.length).toFixed(1)} years
-                </p>
+                <p className="text-2xl font-bold">{avgTenure.toFixed(1)} years</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className={flightRisk.length > employees.length * 0.2 ? 'border-destructive/50' : ''}>
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <AlertTriangle className={`w-8 h-8 ${flightRisk.length > employees.length * 0.2 ? 'text-destructive' : 'text-warning'}`} />
+              <TrendingUp className="w-8 h-8 text-chart-2" />
               <div>
-                <p className="text-sm text-muted-foreground">Flight Risk (&lt;1yr)</p>
-                <p className="text-2xl font-bold">{flightRisk.length}</p>
+                <p className="text-sm text-muted-foreground">Recent Joiners (&lt;1yr)</p>
+                <p className="text-2xl font-bold">{recentJoiners.length}</p>
                 <p className="text-sm text-muted-foreground">
-                  {((flightRisk.length / employees.length) * 100).toFixed(0)}% of workforce
+                  {((recentJoiners.length / employees.length) * 100).toFixed(0)}% of workforce
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className={knowledgeConcentration.length > employees.length * 0.3 ? 'border-warning/50' : ''}>
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
               <Users className="w-8 h-8 text-success" />
               <div>
                 <p className="text-sm text-muted-foreground">Veterans (5+ yrs)</p>
-                <p className="text-2xl font-bold">{knowledgeConcentration.length}</p>
+                <p className="text-2xl font-bold">{veterans.length}</p>
                 <p className="text-sm text-muted-foreground">
-                  {formatCurrency(knowledgeConcentration.reduce((sum, e) => sum + e.flrr, 0))} FLRR
+                  {formatCurrency(veterans.reduce((sum, e) => sum + e.flrr, 0))} FLRR
                 </p>
               </div>
             </div>
@@ -182,18 +260,85 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
         </Card>
       </div>
 
-      {/* Tenure by Department */}
+      {/* Average Tenure by Function */}
       <Card>
         <CardHeader>
-          <CardTitle>New Hire Concentration by Department</CardTitle>
+          <CardTitle>Average Tenure by Function</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={tenureByDept.slice(0, 10)} layout="vertical">
+              <BarChart data={tenureByFunction} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" unit=" yrs" />
+                <YAxis type="category" dataKey="function" width={100} tick={{ fontSize: 12 }} />
+                <Tooltip 
+                  formatter={(value: number) => [`${value.toFixed(1)} years`, 'Avg Tenure']}
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                  }}
+                />
+                <Bar dataKey="avgTenure" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Hiring Trend by Quarter */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Hiring Trend (Last 20 Quarters)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={hiringByQuarter.data}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis 
+                  dataKey="quarter" 
+                  tick={{ fontSize: 10 }} 
+                  angle={-45} 
+                  textAnchor="end" 
+                  height={60}
+                />
+                <YAxis />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                  }}
+                />
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                {hiringByQuarter.functions.map((func, index) => (
+                  <Bar 
+                    key={func} 
+                    dataKey={func} 
+                    stackId="a" 
+                    fill={FUNCTION_COLORS[index % FUNCTION_COLORS.length]} 
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Recent Joiners by Function */}
+      <Card>
+        <CardHeader>
+          <CardTitle>New Hire Concentration by Function</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={tenureByFunctionData.slice(0, 10)} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                <YAxis type="category" dataKey="department" width={100} tick={{ fontSize: 12 }} />
+                <YAxis type="category" dataKey="function" width={100} tick={{ fontSize: 12 }} />
                 <Tooltip 
                   formatter={(value: number) => `${value.toFixed(1)}%`}
                   contentStyle={{ 
@@ -202,73 +347,39 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
                     borderRadius: '8px',
                   }}
                 />
-                <Bar dataKey="newHirePercent" fill="hsl(var(--warning))" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="newHirePercent" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </CardContent>
       </Card>
 
-      {/* Flight Risk Details */}
-      {flightRisk.length > 0 && (
+      {/* Recent Joiners List */}
+      {recentJoiners.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-warning" />
-              Flight Risk Employees (&lt;1 year tenure)
+              <TrendingUp className="w-5 h-5 text-chart-2" />
+              Recent Joiners (&lt;1 year tenure)
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
-              {flightRisk.slice(0, 15).map((emp) => (
+              {recentJoiners.slice(0, 15).map((emp) => (
                 <div key={emp.employeeId} className="p-3 rounded-lg border bg-card">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium truncate">{emp.name}</span>
-                    <Badge variant="outline" className="text-warning border-warning text-xs">
+                    <span className="font-medium truncate">{emp.title}</span>
+                    <Badge variant="outline" className="text-chart-2 border-chart-2 text-xs">
                       {emp.tenureYears.toFixed(1)} yrs
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground truncate">{emp.title}</p>
-                  <p className="text-sm text-muted-foreground">{emp.department}</p>
+                  <p className="text-sm text-muted-foreground">{emp.function}</p>
                   <p className="text-sm font-medium text-primary mt-1">{formatCurrency(emp.flrr)}</p>
                 </div>
               ))}
-              {flightRisk.length > 15 && (
+              {recentJoiners.length > 15 && (
                 <div className="p-3 rounded-lg border bg-secondary/50 flex items-center justify-center">
-                  <p className="text-sm text-muted-foreground">+{flightRisk.length - 15} more</p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Knowledge Concentration */}
-      {knowledgeConcentration.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-success" />
-              Institutional Knowledge (5+ years tenure)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
-              {knowledgeConcentration.slice(0, 15).map((emp) => (
-                <div key={emp.employeeId} className="p-3 rounded-lg border bg-success/5">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium truncate">{emp.name}</span>
-                    <Badge variant="outline" className="text-success border-success text-xs">
-                      {emp.tenureYears.toFixed(1)} yrs
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground truncate">{emp.title}</p>
-                  <p className="text-sm text-muted-foreground">{emp.department}</p>
-                </div>
-              ))}
-              {knowledgeConcentration.length > 15 && (
-                <div className="p-3 rounded-lg border bg-secondary/50 flex items-center justify-center">
-                  <p className="text-sm text-muted-foreground">+{knowledgeConcentration.length - 15} more</p>
+                  <p className="text-sm text-muted-foreground">+{recentJoiners.length - 15} more</p>
                 </div>
               )}
             </div>

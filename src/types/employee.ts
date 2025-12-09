@@ -1,17 +1,15 @@
 export interface Employee {
   employeeId: string;
-  name: string;
   managerId: string | null;
-  department: string;
+  function: string;
   title: string;
   location: string;
+  country: string;
   hireDate: string;
   flrr: number;
   baseSalary: number;
   bonus: number;
-  roleFamily: string;
-  countryTag: 'Best-cost' | 'High-cost';
-  costCenter: string;
+  businessUnit: string;
 }
 
 export interface OrgNode extends Employee {
@@ -30,8 +28,8 @@ export interface LayerStats {
   avgTenure: number;
 }
 
-export interface DepartmentSpanStats {
-  department: string;
+export interface FunctionSpanStats {
+  function: string;
   avgSpan: number;
   layers: number;
   managerCount: number;
@@ -42,13 +40,13 @@ export interface DepartmentSpanStats {
 export interface SpanStats {
   managerId: string;
   managerName: string;
-  department: string;
+  function: string;
   directReports: number;
   layer: number;
 }
 
-export interface DepartmentStats {
-  department: string;
+export interface FunctionStats {
+  function: string;
   headcount: number;
   totalFLRR: number;
   avgFLRR: number;
@@ -57,15 +55,26 @@ export interface DepartmentStats {
   bestCostPercent: number;
 }
 
-export interface RoleFamilyStats {
-  roleFamily: string;
+export interface CountryStats {
+  country: string;
   headcount: number;
   totalFLRR: number;
-  totalBase: number;
-  totalBonus: number;
-  avgVariablePercent: number;
-  bestCostCount: number;
-  highCostCount: number;
+  avgFLRR: number;
+  tag: 'Best-cost' | 'High-cost' | 'Untagged';
+}
+
+export interface FunctionOffshoringStats {
+  function: string;
+  totalHeadcount: number;
+  bccHeadcount: number;
+  hccHeadcount: number;
+  bccPercent: number;
+  hccPercent: number;
+  avgFLRR: number;
+  bccFLRR: number;
+  hccFLRR: number;
+  offshoringPotential: number; // User input: percentage
+  potentialSavings: number; // Calculated
 }
 
 export interface TenureBand {
@@ -98,9 +107,9 @@ export interface AnalysisData {
   orgTree: OrgNode | null;
   layerStats: LayerStats[];
   spanStats: SpanStats[];
-  departmentStats: DepartmentStats[];
-  departmentSpanStats: DepartmentSpanStats[];
-  roleFamilyStats: RoleFamilyStats[];
+  functionStats: FunctionStats[];
+  functionSpanStats: FunctionSpanStats[];
+  countryStats: CountryStats[];
   tenureBands: TenureBand[];
   quickWins: QuickWin[];
   totals: {
