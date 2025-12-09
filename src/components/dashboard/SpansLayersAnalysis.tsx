@@ -13,7 +13,7 @@ interface SpansLayersAnalysisProps {
 }
 
 export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: SpansLayersAnalysisProps) {
-  const { layerStats, spanStats, departmentSpanStats, totals } = data;
+  const { layerStats, spanStats, functionSpanStats, totals } = data;
 
   // Span distribution data
   const spanDistribution = [
@@ -324,16 +324,16 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
         </Card>
       </div>
 
-      {/* Department Spans & Layers Table */}
+      {/* Function Spans & Layers Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Span of Control by Department</CardTitle>
+          <CardTitle>Span of Control by Function</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Department</TableHead>
+                <TableHead>Function</TableHead>
                 <TableHead className="text-right">Employees</TableHead>
                 <TableHead className="text-right">Managers</TableHead>
                 <TableHead className="text-right">Manager %</TableHead>
@@ -342,18 +342,18 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
               </TableRow>
             </TableHeader>
             <TableBody>
-              {departmentSpanStats.map((dept) => (
-                <TableRow key={dept.department}>
-                  <TableCell className="font-medium">{dept.department}</TableCell>
-                  <TableCell className="text-right">{dept.totalEmployees}</TableCell>
-                  <TableCell className="text-right">{dept.managerCount}</TableCell>
-                  <TableCell className="text-right">{formatPercent(dept.managerPercent)}</TableCell>
+              {functionSpanStats.map((func) => (
+                <TableRow key={func.function}>
+                  <TableCell className="font-medium">{func.function}</TableCell>
+                  <TableCell className="text-right">{func.totalEmployees}</TableCell>
+                  <TableCell className="text-right">{func.managerCount}</TableCell>
+                  <TableCell className="text-right">{formatPercent(func.managerPercent)}</TableCell>
                   <TableCell className="text-right">
-                    <span className={dept.avgSpan < benchmarks.minSpan ? 'text-warning' : dept.avgSpan > benchmarks.maxSpan ? 'text-destructive' : 'text-success'}>
-                      {dept.avgSpan.toFixed(1)}
+                    <span className={func.avgSpan < benchmarks.minSpan ? 'text-warning' : func.avgSpan > benchmarks.maxSpan ? 'text-destructive' : 'text-success'}>
+                      {func.avgSpan.toFixed(1)}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right">{dept.layers}</TableCell>
+                  <TableCell className="text-right">{func.layers}</TableCell>
                 </TableRow>
               ))}
               {/* Org Average Row */}
@@ -384,7 +384,7 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
               {outliers.singleReport.slice(0, 12).map((mgr) => (
                 <div key={mgr.managerId} className="p-3 rounded-lg border bg-destructive/5">
                   <p className="font-medium">{mgr.managerName}</p>
-                  <p className="text-sm text-muted-foreground">{mgr.department}</p>
+                  <p className="text-sm text-muted-foreground">{mgr.function}</p>
                   <p className="text-xs text-muted-foreground">Layer {mgr.layer}</p>
                 </div>
               ))}

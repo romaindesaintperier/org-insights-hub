@@ -3,38 +3,38 @@ import * as XLSX from 'xlsx';
 
 export interface ColumnMapping {
   employeeId: string | null;
-  name: string | null;
   managerId: string | null;
-  department: string | null;
+  function: string | null;
   title: string | null;
   location: string | null;
+  country: string | null;
   hireDate: string | null;
   flrr: string | null;
   baseSalary: string | null;
   bonus: string | null;
-  roleFamily: string | null;
-  countryTag: string | null;
-  costCenter: string | null;
+  businessUnit: string | null;
 }
 
 export const fieldLabels: Record<keyof ColumnMapping, string> = {
   employeeId: 'Employee ID',
-  name: 'Name',
   managerId: 'Manager ID',
-  department: 'Department',
+  function: 'Function',
   title: 'Title',
   location: 'Location',
+  country: 'Country',
   hireDate: 'Hire Date',
   flrr: 'FLRR',
   baseSalary: 'Base Salary',
   bonus: 'Bonus',
-  roleFamily: 'Role Family',
-  countryTag: 'Country Tag',
-  costCenter: 'Cost Center',
+  businessUnit: 'Business Unit',
 };
 
-export const requiredFields: (keyof ColumnMapping)[] = ['employeeId', 'name', 'flrr', 'roleFamily', 'countryTag'];
-export const importantFields: (keyof ColumnMapping)[] = ['managerId'];
+// All fields are now "important" - no required fields
+export const requiredFields: (keyof ColumnMapping)[] = [];
+export const importantFields: (keyof ColumnMapping)[] = [
+  'employeeId', 'managerId', 'function', 'title', 'location', 'country', 
+  'hireDate', 'flrr', 'baseSalary', 'bonus', 'businessUnit'
+];
 
 function findColumn(headers: string[], possibleNames: string[]): string | null {
   const lowerPossible = possibleNames.map(n => n.toLowerCase());
@@ -44,35 +44,31 @@ function findColumn(headers: string[], possibleNames: string[]): string | null {
 
 const columnPatterns: Record<keyof ColumnMapping, string[]> = {
   employeeId: ['employee id', 'emp id', 'employee_id', 'empid', 'id', 'employee number'],
-  name: ['name', 'employee name', 'full name', 'emp name'],
   managerId: ['manager id', 'manager_id', 'mgr id', 'reports to', 'supervisor id', 'manager'],
-  department: ['department', 'dept', 'division', 'org unit'],
+  function: ['function', 'department', 'dept', 'division', 'org unit', 'role family', 'job family'],
   title: ['title', 'job title', 'position', 'role', 'level'],
   location: ['location', 'office', 'city', 'site', 'work location'],
+  country: ['country', 'country name', 'nation'],
   hireDate: ['hire date', 'start date', 'hire_date', 'date hired', 'join date'],
   flrr: ['flrr', 'fully loaded', 'total cost', 'labor cost', 'fully-loaded run-rate'],
   baseSalary: ['base salary', 'base', 'salary', 'base pay', 'annual salary'],
   bonus: ['bonus', 'variable', 'incentive', 'target bonus', 'variable pay'],
-  roleFamily: ['role family', 'job family', 'function', 'job function', 'role_family'],
-  countryTag: ['country tag', 'cost tag', 'location tag', 'best cost', 'high cost', 'country_tag'],
-  costCenter: ['cost center', 'cost_center', 'cc', 'business unit'],
+  businessUnit: ['business unit', 'business_unit', 'bu', 'segment'],
 };
 
 export function autoDetectColumns(headers: string[]): ColumnMapping {
   const mapping: ColumnMapping = {
     employeeId: null,
-    name: null,
     managerId: null,
-    department: null,
+    function: null,
     title: null,
     location: null,
+    country: null,
     hireDate: null,
     flrr: null,
     baseSalary: null,
     bonus: null,
-    roleFamily: null,
-    countryTag: null,
-    costCenter: null,
+    businessUnit: null,
   };
 
   Object.entries(columnPatterns).forEach(([key, patterns]) => {
@@ -139,16 +135,10 @@ export function parseExcelFile(
         const errors: string[] = [];
         const warnings: string[] = [];
 
-        // Check required columns
-        const missingRequired = requiredFields.filter(col => !mapping[col]);
-        if (missingRequired.length > 0) {
-          errors.push(`Missing required columns: ${missingRequired.map(f => fieldLabels[f]).join(', ')}`);
-        }
-
         // Check important columns
         const missingImportant = importantFields.filter(col => !mapping[col]);
         if (missingImportant.length > 0) {
-          warnings.push(`Important columns not mapped (spans/layers analysis will be limited): ${missingImportant.map(f => fieldLabels[f]).join(', ')}`);
+          warnings.push(`Missing columns (some analyses may be limited): ${missingImportant.map(f => fieldLabels[f]).join(', ')}`);
         }
 
         const employees: Employee[] = [];
@@ -174,10 +164,6 @@ export function parseExcelFile(
           const bonusValue = getValue('bonus');
           const bonus = typeof bonusValue === 'number' ? bonusValue : parseFloat(String(bonusValue || '0').replace(/[$,]/g, ''));
 
-          const countryTagRaw = String(getValue('countryTag') || 'High-cost');
-          const countryTag: 'Best-cost' | 'High-cost' = 
-            countryTagRaw.toLowerCase().includes('best') ? 'Best-cost' : 'High-cost';
-
           const hireDateValue = getValue('hireDate');
           let hireDate: string;
           if (hireDateValue instanceof Date) {
@@ -191,18 +177,16 @@ export function parseExcelFile(
 
           employees.push({
             employeeId,
-            name: String(getValue('name') || `Employee ${i}`),
             managerId: getValue('managerId') ? String(getValue('managerId')) : null,
-            department: String(getValue('department') || 'Unknown'),
+            function: String(getValue('function') || 'Unknown'),
             title: String(getValue('title') || 'Unknown'),
             location: String(getValue('location') || 'Unknown'),
+            country: String(getValue('country') || 'Unknown'),
             hireDate,
             flrr: isNaN(flrr) ? 0 : flrr,
             baseSalary: isNaN(baseSalary) ? 0 : baseSalary,
             bonus: isNaN(bonus) ? 0 : bonus,
-            roleFamily: String(getValue('roleFamily') || 'Other'),
-            countryTag,
-            costCenter: String(getValue('costCenter') || 'Unknown'),
+            businessUnit: String(getValue('businessUnit') || 'Unknown'),
           });
         }
 

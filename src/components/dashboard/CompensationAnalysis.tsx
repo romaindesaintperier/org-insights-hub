@@ -1,31 +1,105 @@
+import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AnalysisData, Benchmarks } from '@/types/employee';
 import { formatCurrency, formatPercent, defaultBenchmarks } from '@/lib/analysis';
-import { AlertTriangle, TrendingUp } from 'lucide-react';
+import { AlertTriangle, TrendingUp, Users } from 'lucide-react';
 
 interface CompensationAnalysisProps {
   data: AnalysisData;
   benchmarks?: Benchmarks;
 }
 
-export function CompensationAnalysis({ data, benchmarks = defaultBenchmarks }: CompensationAnalysisProps) {
-  const { roleFamilyStats } = data;
+interface CompDifference {
+  title: string;
+  function: string;
+  employees: {
+    id: string;
+    flrr: number;
+    baseSalary: number;
+    bonus: number;
+  }[];
+  minComp: number;
+  maxComp: number;
+  avgComp: number;
+  variance: number;
+  variancePercent: number;
+}
 
-  const chartData = roleFamilyStats.map(role => {
-    const target = benchmarks.targetVariableByRole[role.roleFamily] || benchmarks.targetVariableByRole['default'];
-    return {
-      roleFamily: role.roleFamily,
-      'Variable %': role.avgVariablePercent,
-      'Target %': target,
-      base: role.totalBase,
-      bonus: role.totalBonus,
-      headcount: role.headcount,
-      gap: target - role.avgVariablePercent,
-      isBelow: role.avgVariablePercent < target * 0.7,
-    };
-  }).sort((a, b) => b.gap - a.gap);
+export function CompensationAnalysis({ data, benchmarks = defaultBenchmarks }: CompensationAnalysisProps) {
+  const { employees, functionStats } = data;
+
+  // Calculate variable compensation by function
+  const chartData = useMemo(() => {
+    return functionStats.map(func => {
+      const funcEmps = employees.filter(e => e.function === func.function);
+      const totalBase = funcEmps.reduce((sum, e) => sum + e.baseSalary, 0);
+      const totalBonus = funcEmps.reduce((sum, e) => sum + e.bonus, 0);
+      const totalComp = totalBase + totalBonus;
+      const avgVariablePercent = totalComp > 0 ? (totalBonus / totalComp) * 100 : 0;
+      
+      const target = benchmarks.targetVariableByRole[func.function] || benchmarks.targetVariableByRole['default'];
+      
+      return {
+        function: func.function,
+        'Variable %': avgVariablePercent,
+        'Target %': target,
+        base: totalBase,
+        bonus: totalBonus,
+        headcount: func.headcount,
+        gap: target - avgVariablePercent,
+        isBelow: avgVariablePercent < target * 0.7,
+      };
+    }).sort((a, b) => b.gap - a.gap);
+  }, [employees, functionStats, benchmarks]);
+
+  // Find significant compensation differences for same job title
+  const compDifferences = useMemo(() => {
+    const titleMap = new Map<string, typeof employees>();
+    
+    employees.forEach(emp => {
+      const key = emp.title;
+      const existing = titleMap.get(key) || [];
+      existing.push(emp);
+      titleMap.set(key, existing);
+    });
+
+    const differences: CompDifference[] = [];
+
+    titleMap.forEach((emps, title) => {
+      if (emps.length < 2) return;
+      
+      const comps = emps.map(e => e.baseSalary + e.bonus);
+      const minComp = Math.min(...comps);
+      const maxComp = Math.max(...comps);
+      const avgComp = comps.reduce((a, b) => a + b, 0) / comps.length;
+      const variance = maxComp - minComp;
+      const variancePercent = avgComp > 0 ? (variance / avgComp) * 100 : 0;
+
+      // Flag if variance is > 30% of average
+      if (variancePercent > 30 && variance > 10000) {
+        differences.push({
+          title,
+          function: emps[0].function,
+          employees: emps.map(e => ({
+            id: e.employeeId,
+            flrr: e.flrr,
+            baseSalary: e.baseSalary,
+            bonus: e.bonus,
+          })),
+          minComp,
+          maxComp,
+          avgComp,
+          variance,
+          variancePercent,
+        });
+      }
+    });
+
+    return differences.sort((a, b) => b.variancePercent - a.variancePercent).slice(0, 15);
+  }, [employees]);
 
   const misalignedRoles = chartData.filter(r => r.isBelow);
 
@@ -43,9 +117,9 @@ export function CompensationAnalysis({ data, benchmarks = defaultBenchmarks }: C
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {misalignedRoles.map((role) => (
-                <div key={role.roleFamily} className="p-4 rounded-lg border bg-card">
+                <div key={role.function} className="p-4 rounded-lg border bg-card">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium">{role.roleFamily}</span>
+                    <span className="font-medium">{role.function}</span>
                     <Badge variant="outline" className="text-warning border-warning">
                       {role.gap.toFixed(0)}pp gap
                     </Badge>
@@ -63,12 +137,12 @@ export function CompensationAnalysis({ data, benchmarks = defaultBenchmarks }: C
         </Card>
       )}
 
-      {/* Variable Compensation by Role Family */}
+      {/* Variable Compensation by Function */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5" />
-            Variable Compensation by Role Family
+            Variable Compensation by Function
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -77,7 +151,7 @@ export function CompensationAnalysis({ data, benchmarks = defaultBenchmarks }: C
               <BarChart data={chartData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis type="number" domain={[0, 50]} tickFormatter={(v) => `${v}%`} />
-                <YAxis type="category" dataKey="roleFamily" width={100} tick={{ fontSize: 12 }} />
+                <YAxis type="category" dataKey="function" width={100} tick={{ fontSize: 12 }} />
                 <Tooltip 
                   formatter={(value: number, name: string) => [`${value.toFixed(1)}%`, name]}
                   contentStyle={{ 
@@ -105,34 +179,34 @@ export function CompensationAnalysis({ data, benchmarks = defaultBenchmarks }: C
       {/* Compensation Breakdown Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Compensation Breakdown by Role Family</CardTitle>
+          <CardTitle>Compensation Breakdown by Function</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-medium">Role Family</th>
-                  <th className="text-right py-3 px-4 font-medium">Headcount</th>
-                  <th className="text-right py-3 px-4 font-medium">Total Base</th>
-                  <th className="text-right py-3 px-4 font-medium">Total Bonus</th>
-                  <th className="text-right py-3 px-4 font-medium">Total FLRR</th>
-                  <th className="text-right py-3 px-4 font-medium">Variable %</th>
-                  <th className="text-right py-3 px-4 font-medium">Target %</th>
-                  <th className="text-right py-3 px-4 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Function</TableHead>
+                  <TableHead className="text-right">Headcount</TableHead>
+                  <TableHead className="text-right">Total Base</TableHead>
+                  <TableHead className="text-right">Total Bonus</TableHead>
+                  <TableHead className="text-right">Total FLRR</TableHead>
+                  <TableHead className="text-right">Variable %</TableHead>
+                  <TableHead className="text-right">Target %</TableHead>
+                  <TableHead className="text-right">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {chartData.map((role) => (
-                  <tr key={role.roleFamily} className="border-b hover:bg-secondary/30">
-                    <td className="py-3 px-4 font-medium">{role.roleFamily}</td>
-                    <td className="py-3 px-4 text-right">{role.headcount}</td>
-                    <td className="py-3 px-4 text-right">{formatCurrency(role.base)}</td>
-                    <td className="py-3 px-4 text-right">{formatCurrency(role.bonus)}</td>
-                    <td className="py-3 px-4 text-right">{formatCurrency(roleFamilyStats.find(r => r.roleFamily === role.roleFamily)?.totalFLRR || 0)}</td>
-                    <td className="py-3 px-4 text-right">{formatPercent(role['Variable %'])}</td>
-                    <td className="py-3 px-4 text-right text-muted-foreground">{formatPercent(role['Target %'])}</td>
-                    <td className="py-3 px-4 text-right">
+                  <TableRow key={role.function}>
+                    <TableCell className="font-medium">{role.function}</TableCell>
+                    <TableCell className="text-right">{role.headcount}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(role.base)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(role.bonus)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(functionStats.find(r => r.function === role.function)?.totalFLRR || 0)}</TableCell>
+                    <TableCell className="text-right">{formatPercent(role['Variable %'])}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{formatPercent(role['Target %'])}</TableCell>
+                    <TableCell className="text-right">
                       {role.isBelow ? (
                         <Badge variant="outline" className="text-warning border-warning">
                           Below target
@@ -142,11 +216,11 @@ export function CompensationAnalysis({ data, benchmarks = defaultBenchmarks }: C
                           On target
                         </Badge>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </CardContent>
       </Card>
@@ -168,10 +242,63 @@ export function CompensationAnalysis({ data, benchmarks = defaultBenchmarks }: C
               ))}
           </div>
           <p className="text-xs text-muted-foreground mt-4">
-            * Benchmarks represent industry-standard variable compensation percentages for each role family
+            * Benchmarks represent industry-standard variable compensation percentages for each function
           </p>
         </CardContent>
       </Card>
+
+      {/* Significant Compensation Differences */}
+      {compDifferences.length > 0 && (
+        <Card className="border-destructive/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-destructive" />
+              Significant Compensation Differences by Job Title
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              The following job titles show significant compensation variance (&gt;30%) among employees with the same title:
+            </p>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Job Title</TableHead>
+                    <TableHead>Function</TableHead>
+                    <TableHead className="text-right"># Employees</TableHead>
+                    <TableHead className="text-right">Min Comp</TableHead>
+                    <TableHead className="text-right">Max Comp</TableHead>
+                    <TableHead className="text-right">Avg Comp</TableHead>
+                    <TableHead className="text-right">Variance</TableHead>
+                    <TableHead className="text-right">Variance %</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {compDifferences.map((diff) => (
+                    <TableRow key={diff.title}>
+                      <TableCell className="font-medium">{diff.title}</TableCell>
+                      <TableCell>{diff.function}</TableCell>
+                      <TableCell className="text-right">{diff.employees.length}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(diff.minComp)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(diff.maxComp)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(diff.avgComp)}</TableCell>
+                      <TableCell className="text-right font-medium text-destructive">
+                        {formatCurrency(diff.variance)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="outline" className="text-destructive border-destructive">
+                          {formatPercent(diff.variancePercent)}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
