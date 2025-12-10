@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { parseExcelFile, readFileHeaders, autoDetectColumns, ColumnMapping, fieldLabels, importantFields } from '@/lib/excel-parser';
+import { parseExcelFile, readFileHeaders, autoDetectColumns, ColumnMapping, fieldLabels } from '@/lib/excel-parser';
 import { Employee } from '@/types/employee';
 import { ColumnMappingModal } from './ColumnMappingModal';
 
@@ -100,9 +100,8 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
     if (!detectedMapping) return null;
     
     const mapped = (Object.keys(detectedMapping) as (keyof ColumnMapping)[]).filter(k => detectedMapping[k]);
-    const missingImportant = importantFields.filter(f => !detectedMapping[f]);
     
-    return { mapped, missingImportant };
+    return { mapped };
   };
 
   const summary = getMappingSummary();
@@ -190,11 +189,6 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
                   <Badge key={field} variant="secondary" className="bg-success/20 text-success">
                     <CheckCircle className="w-3 h-3 mr-1" />
                     {fieldLabels[field]}
-                  </Badge>
-                ))}
-                {summary.missingImportant.map(field => (
-                  <Badge key={field} variant="secondary" className="bg-warning/20 text-warning">
-                    {fieldLabels[field]} (missing)
                   </Badge>
                 ))}
               </div>

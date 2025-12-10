@@ -324,6 +324,39 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
         </Card>
       </div>
 
+      {/* Streamlining Opportunities */}
+      <Card className="gradient-aubergine text-primary-foreground">
+        <CardHeader>
+          <CardTitle className="text-primary-foreground">Streamlining Opportunities by Function</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm opacity-80 mb-4">
+            Functions with narrow spans, high manager percentages, or deep layer structures offer the most opportunity for organizational streamlining:
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {functionSpanStats
+              .map(func => ({
+                ...func,
+                score: (func.avgSpan < benchmarks.minSpan ? (benchmarks.minSpan - func.avgSpan) * 10 : 0) +
+                       (func.managerPercent > 20 ? func.managerPercent - 20 : 0) +
+                       (func.layers > 4 ? (func.layers - 4) * 5 : 0)
+              }))
+              .filter(f => f.score > 0)
+              .sort((a, b) => b.score - a.score)
+              .slice(0, 3)
+              .map((func, i) => (
+                <div key={func.function} className="p-4 rounded-lg bg-white/10">
+                  <div className="flex justify-between mb-2">
+                    <span className="font-semibold">{func.function}</span>
+                    <span className="text-xs bg-white/20 px-2 py-1 rounded">#{i + 1}</span>
+                  </div>
+                  <p className="text-sm opacity-80">Span: {func.avgSpan.toFixed(1)} | Mgr%: {func.managerPercent.toFixed(0)}% | Layers: {func.layers}</p>
+                </div>
+              ))}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Function Spans & Layers Table */}
       <Card>
         <CardHeader>

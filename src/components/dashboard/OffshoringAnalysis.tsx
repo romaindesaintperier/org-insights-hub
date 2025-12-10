@@ -397,44 +397,66 @@ export function OffshoringAnalysis({ data }: OffshoringAnalysisProps) {
                   <TableHead className="text-right">HCC %</TableHead>
                   <TableHead className="text-right">Avg FLRR</TableHead>
                   <TableHead className="text-center">Offshoring %</TableHead>
+                  <TableHead className="text-center">Benchmark %</TableHead>
                   <TableHead className="text-right">Potential Savings</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {functionOffshoringStats.map((func) => (
-                  <TableRow key={func.function}>
-                    <TableCell className="font-medium">{func.function}</TableCell>
-                    <TableCell className="text-right">{func.totalHeadcount}</TableCell>
-                    <TableCell className="text-right">
-                      <span className={func.bccPercent > 40 ? 'text-success' : ''}>
-                        {formatPercent(func.bccPercent)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span className={func.hccPercent > 60 ? 'text-warning' : ''}>
-                        {formatPercent(func.hccPercent)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">{formatCurrency(func.avgFLRR)}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-center">
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={func.offshoringPotential}
-                          onChange={(e) => handleOffshoringPotentialChange(func.function, e.target.value)}
-                          className="w-20 text-center"
-                          placeholder="0"
-                        />
-                        <span className="ml-1 text-muted-foreground">%</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-primary">
-                      {formatCurrency(func.potentialSavings)}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {functionOffshoringStats.map((func) => {
+                  // Benchmark offshoring percentages based on function type
+                  const getBenchmark = (funcName: string): number => {
+                    const lower = funcName.toLowerCase();
+                    if (lower.includes('it') || lower.includes('technology') || lower.includes('engineering')) return 40;
+                    if (lower.includes('finance') || lower.includes('accounting')) return 35;
+                    if (lower.includes('hr') || lower.includes('human')) return 30;
+                    if (lower.includes('customer') || lower.includes('support') || lower.includes('service')) return 50;
+                    if (lower.includes('operations') || lower.includes('admin')) return 35;
+                    if (lower.includes('sales')) return 15;
+                    if (lower.includes('marketing')) return 25;
+                    if (lower.includes('legal')) return 15;
+                    if (lower.includes('research') || lower.includes('r&d')) return 20;
+                    return 25; // default benchmark
+                  };
+                  const benchmark = getBenchmark(func.function);
+                  
+                  return (
+                    <TableRow key={func.function}>
+                      <TableCell className="font-medium">{func.function}</TableCell>
+                      <TableCell className="text-right">{func.totalHeadcount}</TableCell>
+                      <TableCell className="text-right">
+                        <span className={func.bccPercent > 40 ? 'text-success' : ''}>
+                          {formatPercent(func.bccPercent)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className={func.hccPercent > 60 ? 'text-warning' : ''}>
+                          {formatPercent(func.hccPercent)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">{formatCurrency(func.avgFLRR)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center">
+                          <Input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={func.offshoringPotential}
+                            onChange={(e) => handleOffshoringPotentialChange(func.function, e.target.value)}
+                            className="w-20 text-center"
+                            placeholder="0"
+                          />
+                          <span className="ml-1 text-muted-foreground">%</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center text-muted-foreground">
+                        {benchmark}%
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-primary">
+                        {formatCurrency(func.potentialSavings)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

@@ -13,6 +13,14 @@ interface ExecutiveSummaryProps {
 export function ExecutiveSummary({ data }: ExecutiveSummaryProps) {
   const { totals, quickWins, functionStats, employees } = data;
 
+  // Calculate average tenure
+  const now = new Date();
+  const avgTenure = employees.reduce((sum, emp) => {
+    const hireDate = new Date(emp.hireDate);
+    const years = (now.getTime() - hireDate.getTime()) / (1000 * 60 * 60 * 24 * 365);
+    return sum + years;
+  }, 0) / employees.length;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -36,18 +44,17 @@ export function ExecutiveSummary({ data }: ExecutiveSummaryProps) {
         />
         <MetricCard
           title="Manager:IC Ratio"
-          value={`1:${(1 / totals.managerToICRatio).toFixed(1)}`}
+          value={`1:${totals.managerToICRatio > 0 ? (1 / totals.managerToICRatio).toFixed(1) : '0'}`}
           icon={Target}
         />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard
-          title="Best-Cost Footprint"
-          value={formatPercent(totals.bestCostPercent)}
-          subtitle={`${Math.round(totals.headcount * totals.bestCostPercent / 100)} employees`}
+          title="Average Tenure"
+          value={`${avgTenure.toFixed(1)} years`}
+          subtitle={`${employees.length} employees`}
           icon={Globe}
-          variant={totals.bestCostPercent > 40 ? 'accent' : 'default'}
         />
         <MetricCard
           title="Avg Variable Comp"

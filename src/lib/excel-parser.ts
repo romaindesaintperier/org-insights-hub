@@ -23,37 +23,52 @@ export const fieldLabels: Record<keyof ColumnMapping, string> = {
   location: 'Location',
   country: 'Country',
   hireDate: 'Hire Date',
-  flrr: 'FLRR',
+  flrr: 'Fully Loaded Run-Rate (FLRR)',
   baseSalary: 'Base Salary',
-  bonus: 'Bonus',
+  bonus: 'Variable Compensation',
   businessUnit: 'Business Unit',
 };
 
-// All fields are now "important" - no required fields
+// All fields are optional - tool will adapt based on available data
 export const requiredFields: (keyof ColumnMapping)[] = [];
-export const importantFields: (keyof ColumnMapping)[] = [
-  'employeeId', 'managerId', 'function', 'title', 'location', 'country', 
-  'hireDate', 'flrr', 'baseSalary', 'bonus', 'businessUnit'
-];
+export const importantFields: (keyof ColumnMapping)[] = [];
+
+function normalizeHeader(header: string): string {
+  return header.toLowerCase().replace(/[_\-\s]+/g, ' ').trim();
+}
 
 function findColumn(headers: string[], possibleNames: string[]): string | null {
-  const lowerPossible = possibleNames.map(n => n.toLowerCase());
-  const found = headers.find(h => lowerPossible.includes(h.toLowerCase()));
-  return found || null;
+  const normalizedPatterns = possibleNames.map(normalizeHeader);
+  
+  // First try exact match
+  const exactMatch = headers.find(h => normalizedPatterns.includes(normalizeHeader(h)));
+  if (exactMatch) return exactMatch;
+  
+  // Then try partial match (header contains pattern or pattern contains header)
+  for (const header of headers) {
+    const normalizedHeader = normalizeHeader(header);
+    for (const pattern of normalizedPatterns) {
+      if (normalizedHeader.includes(pattern) || pattern.includes(normalizedHeader)) {
+        return header;
+      }
+    }
+  }
+  
+  return null;
 }
 
 const columnPatterns: Record<keyof ColumnMapping, string[]> = {
-  employeeId: ['employee id', 'emp id', 'employee_id', 'empid', 'id', 'employee number'],
-  managerId: ['manager id', 'manager_id', 'mgr id', 'reports to', 'supervisor id', 'manager'],
-  function: ['function', 'department', 'dept', 'division', 'org unit', 'role family', 'job family'],
-  title: ['title', 'job title', 'position', 'role', 'level'],
-  location: ['location', 'office', 'city', 'site', 'work location'],
-  country: ['country', 'country name', 'nation'],
-  hireDate: ['hire date', 'start date', 'hire_date', 'date hired', 'join date'],
-  flrr: ['flrr', 'fully loaded', 'total cost', 'labor cost', 'fully-loaded run-rate'],
-  baseSalary: ['base salary', 'base', 'salary', 'base pay', 'annual salary'],
-  bonus: ['bonus', 'variable', 'incentive', 'target bonus', 'variable pay'],
-  businessUnit: ['business unit', 'business_unit', 'bu', 'segment'],
+  employeeId: ['employee id', 'emp id', 'employee_id', 'empid', 'employeeid', 'ee id', 'worker id', 'personnel number', 'person id', 'id'],
+  managerId: ['manager id', 'manager_id', 'mgr id', 'reports to', 'supervisor id', 'manager', 'mgrid', 'supervisor', 'reports to id', 'manager employee id'],
+  function: ['function', 'department', 'dept', 'division', 'org unit', 'role family', 'job family', 'job function', 'functional area', 'cost center', 'team'],
+  title: ['title', 'job title', 'position', 'role', 'level', 'job name', 'position title', 'job', 'grade'],
+  location: ['location', 'office', 'city', 'site', 'work location', 'office location', 'work site', 'workplace'],
+  country: ['country', 'country name', 'nation', 'country code', 'work country'],
+  hireDate: ['hire date', 'start date', 'hire_date', 'date hired', 'join date', 'hiredate', 'original hire date', 'employment date', 'date of hire', 'start'],
+  flrr: ['flrr', 'fully loaded', 'total cost', 'labor cost', 'fully-loaded run-rate', 'total comp', 'total compensation', 'annual cost', 'loaded cost', 'run rate'],
+  baseSalary: ['base salary', 'base', 'salary', 'base pay', 'annual salary', 'base compensation', 'annual base'],
+  bonus: ['bonus', 'variable', 'incentive', 'target bonus', 'variable pay', 'variable compensation', 'target incentive', 'stip', 'short term incentive'],
+  businessUnit: ['business unit', 'business_unit', 'bu', 'segment', 'business segment', 'division', 'company', 'legal entity'],
 };
 
 export function autoDetectColumns(headers: string[]): ColumnMapping {
