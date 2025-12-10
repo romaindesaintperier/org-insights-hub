@@ -13,7 +13,7 @@ interface HeadcountBreakdownProps {
 
 export function HeadcountBreakdown({ data }: HeadcountBreakdownProps) {
   const [metric, setMetric] = useState<'headcount' | 'flrr'>('headcount');
-  const { employees, departmentStats, roleFamilyStats } = data;
+  const { employees, functionStats } = data;
 
   // Location data
   const locationStats = Array.from(
@@ -27,21 +27,21 @@ export function HeadcountBreakdown({ data }: HeadcountBreakdownProps) {
     }, new Map<string, { location: string; headcount: number; flrr: number }>())
   ).map(([, v]) => v).sort((a, b) => b.headcount - a.headcount);
 
-  // Cost center data
-  const costCenterStats = Array.from(
+  // Business unit data
+  const businessUnitStats = Array.from(
     employees.reduce((map, emp) => {
-      const cc = emp.costCenter;
-      const existing = map.get(cc) || { costCenter: cc, headcount: 0, flrr: 0 };
+      const bu = emp.businessUnit || 'Unknown';
+      const existing = map.get(bu) || { businessUnit: bu, headcount: 0, flrr: 0 };
       existing.headcount++;
       existing.flrr += emp.flrr;
-      map.set(cc, existing);
+      map.set(bu, existing);
       return map;
-    }, new Map<string, { costCenter: string; headcount: number; flrr: number }>())
+    }, new Map<string, { businessUnit: string; headcount: number; flrr: number }>())
   ).map(([, v]) => v).sort((a, b) => b.headcount - a.headcount);
 
-  // Treemap data for department breakdown
-  const treemapData = departmentStats.map(d => ({
-    name: d.department,
+  // Treemap data for function breakdown
+  const treemapData = functionStats.map(d => ({
+    name: d.function,
     size: metric === 'headcount' ? d.headcount : d.totalFLRR,
     headcount: d.headcount,
     flrr: d.totalFLRR,
@@ -106,7 +106,7 @@ export function HeadcountBreakdown({ data }: HeadcountBreakdownProps) {
       {/* Treemap Overview */}
       <Card>
         <CardHeader>
-          <CardTitle>Department Overview</CardTitle>
+          <CardTitle>Function Overview</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-[400px]">
@@ -123,26 +123,25 @@ export function HeadcountBreakdown({ data }: HeadcountBreakdownProps) {
       </Card>
 
       {/* Detailed Breakdowns */}
-      <Tabs defaultValue="department" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="department">Department</TabsTrigger>
-          <TabsTrigger value="roleFamily">Role Family</TabsTrigger>
+      <Tabs defaultValue="function" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="function">Function</TabsTrigger>
           <TabsTrigger value="location">Location</TabsTrigger>
-          <TabsTrigger value="costCenter">Cost Center</TabsTrigger>
+          <TabsTrigger value="businessUnit">Business Unit</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="department" className="mt-4">
+        <TabsContent value="function" className="mt-4">
           <Card>
             <CardContent className="pt-6">
               <div className="h-[400px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={departmentStats} layout="vertical">
+                  <BarChart data={functionStats} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis 
                       type="number" 
                       tickFormatter={(v) => metric === 'headcount' ? String(v) : formatCurrency(v)} 
                     />
-                    <YAxis type="category" dataKey="department" width={120} tick={{ fontSize: 12 }} />
+                    <YAxis type="category" dataKey="function" width={120} tick={{ fontSize: 12 }} />
                     <Tooltip 
                       formatter={(value: number) => metric === 'headcount' ? formatNumber(value) : formatCurrency(value)}
                       contentStyle={{ 
@@ -154,38 +153,6 @@ export function HeadcountBreakdown({ data }: HeadcountBreakdownProps) {
                     <Bar 
                       dataKey={metric === 'headcount' ? 'headcount' : 'totalFLRR'} 
                       fill="hsl(var(--primary))" 
-                      radius={[0, 4, 4, 0]} 
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="roleFamily" className="mt-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="h-[400px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={roleFamilyStats} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis 
-                      type="number" 
-                      tickFormatter={(v) => metric === 'headcount' ? String(v) : formatCurrency(v)} 
-                    />
-                    <YAxis type="category" dataKey="roleFamily" width={120} tick={{ fontSize: 12 }} />
-                    <Tooltip 
-                      formatter={(value: number) => metric === 'headcount' ? formatNumber(value) : formatCurrency(value)}
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px',
-                      }}
-                    />
-                    <Bar 
-                      dataKey={metric === 'headcount' ? 'headcount' : 'totalFLRR'} 
-                      fill="hsl(var(--chart-2))" 
                       radius={[0, 4, 4, 0]} 
                     />
                   </BarChart>
@@ -227,18 +194,18 @@ export function HeadcountBreakdown({ data }: HeadcountBreakdownProps) {
           </Card>
         </TabsContent>
 
-        <TabsContent value="costCenter" className="mt-4">
+        <TabsContent value="businessUnit" className="mt-4">
           <Card>
             <CardContent className="pt-6">
               <div className="h-[400px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={costCenterStats.slice(0, 15)} layout="vertical">
+                  <BarChart data={businessUnitStats.slice(0, 15)} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis 
                       type="number" 
                       tickFormatter={(v) => metric === 'headcount' ? String(v) : formatCurrency(v)} 
                     />
-                    <YAxis type="category" dataKey="costCenter" width={120} tick={{ fontSize: 12 }} />
+                    <YAxis type="category" dataKey="businessUnit" width={120} tick={{ fontSize: 12 }} />
                     <Tooltip 
                       formatter={(value: number) => metric === 'headcount' ? formatNumber(value) : formatCurrency(value)}
                       contentStyle={{ 
@@ -263,14 +230,14 @@ export function HeadcountBreakdown({ data }: HeadcountBreakdownProps) {
       {/* Summary Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Department Summary</CardTitle>
+          <CardTitle>Function Summary</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-medium">Department</th>
+                  <th className="text-left py-3 px-4 font-medium">Function</th>
                   <th className="text-right py-3 px-4 font-medium">Headcount</th>
                   <th className="text-right py-3 px-4 font-medium">Total FLRR</th>
                   <th className="text-right py-3 px-4 font-medium">Avg FLRR</th>
@@ -278,15 +245,15 @@ export function HeadcountBreakdown({ data }: HeadcountBreakdownProps) {
                 </tr>
               </thead>
               <tbody>
-                {departmentStats.map((dept) => (
-                  <tr key={dept.department} className="border-b hover:bg-secondary/30">
-                    <td className="py-3 px-4 font-medium">{dept.department}</td>
-                    <td className="py-3 px-4 text-right">{formatNumber(dept.headcount)}</td>
-                    <td className="py-3 px-4 text-right">{formatCurrency(dept.totalFLRR)}</td>
-                    <td className="py-3 px-4 text-right">{formatCurrency(dept.avgFLRR)}</td>
+                {functionStats.map((func) => (
+                  <tr key={func.function} className="border-b hover:bg-secondary/30">
+                    <td className="py-3 px-4 font-medium">{func.function}</td>
+                    <td className="py-3 px-4 text-right">{formatNumber(func.headcount)}</td>
+                    <td className="py-3 px-4 text-right">{formatCurrency(func.totalFLRR)}</td>
+                    <td className="py-3 px-4 text-right">{formatCurrency(func.avgFLRR)}</td>
                     <td className="py-3 px-4 text-right">
-                      <span className={dept.bestCostPercent > 40 ? 'text-success' : 'text-muted-foreground'}>
-                        {dept.bestCostPercent.toFixed(0)}%
+                      <span className={func.bestCostPercent > 40 ? 'text-success' : 'text-muted-foreground'}>
+                        {func.bestCostPercent.toFixed(0)}%
                       </span>
                     </td>
                   </tr>

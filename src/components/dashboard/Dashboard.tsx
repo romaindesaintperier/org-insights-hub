@@ -38,8 +38,7 @@ export function Dashboard({ employees, onReset }: DashboardProps) {
       summary: analysisData.totals,
       quickWins: analysisData.quickWins,
       layerStats: analysisData.layerStats,
-      departmentStats: analysisData.departmentStats,
-      roleFamilyStats: analysisData.roleFamilyStats,
+      functionStats: analysisData.functionStats,
       exportDate: new Date().toISOString(),
     };
 
