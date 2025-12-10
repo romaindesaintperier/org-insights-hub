@@ -30,6 +30,7 @@ export function FunctionSummaryTable({ functionStats, totalHeadcount, totalFLRR 
               <TableHead className="text-right">% of Total</TableHead>
               <TableHead className="text-right">FLRR</TableHead>
               <TableHead className="text-right">% of FLRR</TableHead>
+              <TableHead className="text-right">Avg FLRR/Employee</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -44,6 +45,7 @@ export function FunctionSummaryTable({ functionStats, totalHeadcount, totalFLRR 
                 <TableCell className="text-right">
                   {formatPercent((func.totalFLRR / totalFLRR) * 100)}
                 </TableCell>
+                <TableCell className="text-right">{formatCurrency(func.avgFLRR)}</TableCell>
               </TableRow>
             ))}
             {/* Total Row */}
@@ -53,6 +55,7 @@ export function FunctionSummaryTable({ functionStats, totalHeadcount, totalFLRR 
               <TableCell className="text-right">100%</TableCell>
               <TableCell className="text-right">{formatCurrency(totalFLRR)}</TableCell>
               <TableCell className="text-right">100%</TableCell>
+              <TableCell className="text-right">{formatCurrency(totalFLRR / totalHeadcount)}</TableCell>
             </TableRow>
           </TableBody>
         </Table>

@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { AnalysisData } from '@/types/employee';
-import { formatCurrency } from '@/lib/analysis';
-import { Clock, Users, TrendingUp } from 'lucide-react';
+import { formatCurrency, formatNumber, formatPercent } from '@/lib/analysis';
+import { Clock, Users, TrendingUp, ArrowUp } from 'lucide-react';
 
 interface TenureAnalysisProps {
   data: AnalysisData;
@@ -112,23 +113,44 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
     };
   }, [employees]);
 
-  // Tenure by function for chart
-  const tenureByFunctionData = useMemo(() => {
-    return functionStats.map(func => {
-      const funcEmps = employeesWithTenure.filter(e => e.function === func.function);
-      const newHires = funcEmps.filter(e => e.tenureYears < 1).length;
-      const veterans = funcEmps.filter(e => e.tenureYears >= 5).length;
-      const avgTenure = funcEmps.reduce((sum, e) => sum + e.tenureYears, 0) / funcEmps.length;
+  // New hire concentration by function (past year)
+  const newHireConcentration = useMemo(() => {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    
+    const newHires = employees.filter(emp => new Date(emp.hireDate) >= oneYearAgo);
+    const totalNewHires = newHires.length;
+    
+    const byFunction = functionStats.map(func => {
+      const funcNewHires = newHires.filter(e => e.function === func.function).length;
       return {
         function: func.function,
-        avgTenure,
-        headcount: func.headcount,
-        newHires,
-        veterans,
-        newHirePercent: (newHires / func.headcount) * 100,
+        newHires: funcNewHires,
+        percentOfNewHires: totalNewHires > 0 ? (funcNewHires / totalNewHires) * 100 : 0,
       };
-    }).sort((a, b) => b.newHirePercent - a.newHirePercent);
-  }, [employeesWithTenure, functionStats]);
+    }).sort((a, b) => b.newHires - a.newHires);
+    
+    return { byFunction, totalNewHires };
+  }, [employees, functionStats]);
+
+  // Highest growing functions (new hires / total employees in function)
+  const fastestGrowingFunctions = useMemo(() => {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    
+    return functionStats.map(func => {
+      const funcEmps = employees.filter(e => e.function === func.function);
+      const funcNewHires = funcEmps.filter(e => new Date(e.hireDate) >= oneYearAgo).length;
+      const growthRate = funcEmps.length > 0 ? (funcNewHires / funcEmps.length) * 100 : 0;
+      
+      return {
+        function: func.function,
+        totalEmployees: funcEmps.length,
+        newHires: funcNewHires,
+        growthRate,
+      };
+    }).sort((a, b) => b.growthRate - a.growthRate);
+  }, [employees, functionStats]);
 
   const avgTenure = employeesWithTenure.reduce((sum, e) => sum + e.tenureYears, 0) / employees.length;
   const veterans = employeesWithTenure.filter(e => e.tenureYears >= 5);
@@ -271,7 +293,13 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
               <BarChart data={tenureByFunction} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis type="number" unit=" yrs" />
-                <YAxis type="category" dataKey="function" width={100} tick={{ fontSize: 12 }} />
+                <YAxis 
+                  type="category" 
+                  dataKey="function" 
+                  width={120} 
+                  tick={{ fontSize: 11 }} 
+                  interval={0}
+                />
                 <Tooltip 
                   formatter={(value: number) => [`${value.toFixed(1)} years`, 'Avg Tenure']}
                   contentStyle={{ 
@@ -327,29 +355,59 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
         </CardContent>
       </Card>
 
-      {/* Recent Joiners by Function */}
+      {/* New Hire Concentration by Function */}
       <Card>
         <CardHeader>
-          <CardTitle>New Hire Concentration by Function</CardTitle>
+          <CardTitle>New Hire Concentration by Function (Past Year)</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={tenureByFunctionData.slice(0, 10)} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                <YAxis type="category" dataKey="function" width={100} tick={{ fontSize: 12 }} />
-                <Tooltip 
-                  formatter={(value: number) => `${value.toFixed(1)}%`}
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Bar dataKey="newHirePercent" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <p className="text-sm text-muted-foreground mb-4">
+            Total new hires in past year: <strong>{newHireConcentration.totalNewHires}</strong>
+          </p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Function</TableHead>
+                <TableHead className="text-right"># New Hires</TableHead>
+                <TableHead className="text-right">% of Total New Hires</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {newHireConcentration.byFunction.filter(f => f.newHires > 0).map((func) => (
+                <TableRow key={func.function}>
+                  <TableCell className="font-medium">{func.function}</TableCell>
+                  <TableCell className="text-right">{formatNumber(func.newHires)}</TableCell>
+                  <TableCell className="text-right">{formatPercent(func.percentOfNewHires)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Fastest Growing Functions */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ArrowUp className="w-5 h-5 text-success" />
+            Fastest Growing Functions (Past Year)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {fastestGrowingFunctions.slice(0, 9).map((func, index) => (
+              <div key={func.function} className="p-4 rounded-lg border bg-card">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium">{func.function}</span>
+                  <Badge variant={index < 3 ? 'default' : 'secondary'} className={index < 3 ? 'bg-success' : ''}>
+                    +{func.growthRate.toFixed(0)}%
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {func.newHires} new hires out of {func.totalEmployees} total
+                </p>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
