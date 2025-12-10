@@ -49,7 +49,7 @@ export function HeadcountBreakdown({ data }: HeadcountBreakdownProps) {
 
   const CustomTreemapContent = (props: any) => {
     const { x, y, width, height, name, headcount, flrr } = props;
-    if (width < 50 || height < 30) return null;
+    if (width < 50 || height < 30 || !name) return null;
 
     return (
       <g>
@@ -81,7 +81,7 @@ export function HeadcountBreakdown({ data }: HeadcountBreakdownProps) {
           fontSize={10}
           opacity={0.8}
         >
-          {metric === 'headcount' ? `${headcount}` : formatCurrency(flrr)}
+          {metric === 'headcount' ? `${headcount ?? 0}` : formatCurrency(flrr ?? 0)}
         </text>
       </g>
     );
