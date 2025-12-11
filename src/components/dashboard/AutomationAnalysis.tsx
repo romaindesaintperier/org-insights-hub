@@ -18,12 +18,12 @@ interface AutomationAnalysisProps {
   data: AnalysisData;
 }
 
-interface AutomationRisk {
+interface AutomationOpportunity {
   title: string;
   headcount: number;
   totalFLRR: number;
-  riskLevel: 'high' | 'medium' | 'low';
-  riskScore: number;
+  opportunityLevel: 'high' | 'medium' | 'low';
+  opportunityScore: number;
   rationale: string;
 }
 
@@ -117,14 +117,14 @@ function getAutomationRisk(title: string): { score: number; rationale: string } 
   return { score: 35, rationale: 'Role requires further analysis' };
 }
 
-function getRiskLevel(score: number): 'high' | 'medium' | 'low' {
+function getOpportunityLevel(score: number): 'high' | 'medium' | 'low' {
   if (score >= 60) return 'high';
   if (score >= 35) return 'medium';
   return 'low';
 }
 
 export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
-  const automationRisks = useMemo(() => {
+  const automationOpportunities = useMemo(() => {
     // Group employees by title
     const titleGroups = new Map<string, { headcount: number; totalFLRR: number }>();
     
@@ -137,29 +137,29 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
       });
     }
     
-    // Calculate risk for each title
-    const risks: AutomationRisk[] = [];
+    // Calculate opportunity for each title
+    const opportunities: AutomationOpportunity[] = [];
     
     for (const [title, stats] of titleGroups) {
       const { score, rationale } = getAutomationRisk(title);
-      risks.push({
+      opportunities.push({
         title,
         headcount: stats.headcount,
         totalFLRR: stats.totalFLRR,
-        riskLevel: getRiskLevel(score),
-        riskScore: score,
+        opportunityLevel: getOpportunityLevel(score),
+        opportunityScore: score,
         rationale,
       });
     }
     
-    // Sort by risk score descending
-    return risks.sort((a, b) => b.riskScore - a.riskScore);
+    // Sort by opportunity score descending
+    return opportunities.sort((a, b) => b.opportunityScore - a.opportunityScore);
   }, [data.employees]);
 
   const summaryStats = useMemo(() => {
-    const high = automationRisks.filter(r => r.riskLevel === 'high');
-    const medium = automationRisks.filter(r => r.riskLevel === 'medium');
-    const low = automationRisks.filter(r => r.riskLevel === 'low');
+    const high = automationOpportunities.filter(r => r.opportunityLevel === 'high');
+    const medium = automationOpportunities.filter(r => r.opportunityLevel === 'medium');
+    const low = automationOpportunities.filter(r => r.opportunityLevel === 'low');
     
     const highHeadcount = high.reduce((sum, r) => sum + r.headcount, 0);
     const highFLRR = high.reduce((sum, r) => sum + r.totalFLRR, 0);
@@ -177,26 +177,26 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
       totalHeadcount: data.totals.headcount,
       totalFLRR: data.totals.totalFLRR,
     };
-  }, [automationRisks, data.totals]);
+  }, [automationOpportunities, data.totals]);
 
-  const highRiskRoles = automationRisks.filter(r => r.riskLevel === 'high').slice(0, 15);
-  const mediumRiskRoles = automationRisks.filter(r => r.riskLevel === 'medium').slice(0, 10);
+  const highOpportunityRoles = automationOpportunities.filter(r => r.opportunityLevel === 'high').slice(0, 15);
+  const mediumOpportunityRoles = automationOpportunities.filter(r => r.opportunityLevel === 'medium').slice(0, 10);
 
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-destructive/50 bg-destructive/5">
+        <Card className="border-primary/50 bg-primary/5">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-destructive" />
-              High Automation Risk
+              <AlertTriangle className="h-4 w-4 text-primary" />
+              High Automation Opportunity
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-destructive">
+                <span className="text-2xl font-bold text-primary">
                   {formatNumber(summaryStats.high.count)}
                 </span>
                 <span className="text-sm text-muted-foreground">
@@ -204,7 +204,7 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
                 </span>
               </div>
               <div className="text-sm text-muted-foreground">
-                {formatCurrency(summaryStats.high.flrr)} FLRR at risk
+                {formatCurrency(summaryStats.high.flrr)} FLRR opportunity
               </div>
               <div className="text-xs text-muted-foreground">
                 Across {summaryStats.high.titles} job titles
@@ -217,7 +217,7 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <TrendingDown className="h-4 w-4 text-yellow-600" />
-              Medium Automation Risk
+              Medium Automation Opportunity
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -231,7 +231,7 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
                 </span>
               </div>
               <div className="text-sm text-muted-foreground">
-                {formatCurrency(summaryStats.medium.flrr)} FLRR potentially impacted
+                {formatCurrency(summaryStats.medium.flrr)} FLRR potential
               </div>
               <div className="text-xs text-muted-foreground">
                 Across {summaryStats.medium.titles} job titles
@@ -244,7 +244,7 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Users className="h-4 w-4 text-green-600" />
-              Low Automation Risk
+              Low Automation Opportunity
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -258,7 +258,7 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
                 </span>
               </div>
               <div className="text-sm text-muted-foreground">
-                {formatCurrency(summaryStats.low.flrr)} FLRR lower risk
+                {formatCurrency(summaryStats.low.flrr)} FLRR lower opportunity
               </div>
               <div className="text-xs text-muted-foreground">
                 Across {summaryStats.low.titles} job titles
@@ -283,17 +283,17 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
           <div className="space-y-4">
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-destructive font-medium">High Risk</span>
+                <span className="text-primary font-medium">High Opportunity</span>
                 <span>{((summaryStats.high.count / summaryStats.totalHeadcount) * 100).toFixed(1)}%</span>
               </div>
               <Progress 
                 value={(summaryStats.high.count / summaryStats.totalHeadcount) * 100} 
-                className="h-2 bg-destructive/20"
+                className="h-2 bg-primary/20"
               />
             </div>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-yellow-600 font-medium">Medium Risk</span>
+                <span className="text-yellow-600 font-medium">Medium Opportunity</span>
                 <span>{((summaryStats.medium.count / summaryStats.totalHeadcount) * 100).toFixed(1)}%</span>
               </div>
               <Progress 
@@ -303,7 +303,7 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
             </div>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-green-600 font-medium">Low Risk</span>
+                <span className="text-green-600 font-medium">Low Opportunity</span>
                 <span>{((summaryStats.low.count / summaryStats.totalHeadcount) * 100).toFixed(1)}%</span>
               </div>
               <Progress 
@@ -320,37 +320,37 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
             </div>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
-                <div className="text-lg font-bold text-destructive">
+                <div className="text-lg font-bold text-primary">
                   {formatCurrency(summaryStats.high.flrr)}
                 </div>
-                <div className="text-xs text-muted-foreground">High Risk</div>
+                <div className="text-xs text-muted-foreground">High Opportunity</div>
               </div>
               <div>
                 <div className="text-lg font-bold text-yellow-600">
                   {formatCurrency(summaryStats.medium.flrr)}
                 </div>
-                <div className="text-xs text-muted-foreground">Medium Risk</div>
+                <div className="text-xs text-muted-foreground">Medium Opportunity</div>
               </div>
               <div>
                 <div className="text-lg font-bold text-green-600">
                   {formatCurrency(summaryStats.low.flrr)}
                 </div>
-                <div className="text-xs text-muted-foreground">Low Risk</div>
+                <div className="text-xs text-muted-foreground">Low Opportunity</div>
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* High Risk Roles Table */}
+      {/* High Opportunity Roles Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-destructive" />
-            High Automation Risk Job Titles
+            <AlertTriangle className="h-5 w-5 text-primary" />
+            High Automation Opportunity Job Titles
           </CardTitle>
           <CardDescription>
-            Roles most likely to be impacted by AI and automation systems
+            Roles with greatest potential for AI and automation transformation
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -358,25 +358,25 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
             <TableHeader>
               <TableRow>
                 <TableHead>Job Title</TableHead>
-                <TableHead className="text-center">Risk Score</TableHead>
+                <TableHead className="text-center">Opportunity Score</TableHead>
                 <TableHead className="text-right">Headcount</TableHead>
                 <TableHead className="text-right">Total FLRR</TableHead>
                 <TableHead>Rationale</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {highRiskRoles.length === 0 ? (
+              {highOpportunityRoles.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    No high-risk roles identified in this organization
+                    No high-opportunity roles identified in this organization
                   </TableCell>
                 </TableRow>
               ) : (
-                highRiskRoles.map((role) => (
+                highOpportunityRoles.map((role) => (
                   <TableRow key={role.title}>
                     <TableCell className="font-medium">{role.title}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="destructive">{role.riskScore}%</Badge>
+                      <Badge>{role.opportunityScore}%</Badge>
                     </TableCell>
                     <TableCell className="text-right">{formatNumber(role.headcount)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(role.totalFLRR)}</TableCell>
@@ -391,13 +391,13 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
         </CardContent>
       </Card>
 
-      {/* Medium Risk Roles Table */}
-      {mediumRiskRoles.length > 0 && (
+      {/* Medium Opportunity Roles Table */}
+      {mediumOpportunityRoles.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingDown className="h-5 w-5 text-yellow-600" />
-              Medium Automation Risk Job Titles
+              Medium Automation Opportunity Job Titles
             </CardTitle>
             <CardDescription>
               Roles with partial automation potential - may require role evolution
@@ -408,19 +408,19 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Job Title</TableHead>
-                  <TableHead className="text-center">Risk Score</TableHead>
+                  <TableHead className="text-center">Opportunity Score</TableHead>
                   <TableHead className="text-right">Headcount</TableHead>
                   <TableHead className="text-right">Total FLRR</TableHead>
                   <TableHead>Rationale</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mediumRiskRoles.map((role) => (
+                {mediumOpportunityRoles.map((role) => (
                   <TableRow key={role.title}>
                     <TableCell className="font-medium">{role.title}</TableCell>
                     <TableCell className="text-center">
                       <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-700">
-                        {role.riskScore}%
+                        {role.opportunityScore}%
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">{formatNumber(role.headcount)}</TableCell>
@@ -440,11 +440,11 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
       <Card className="bg-muted/30">
         <CardContent className="pt-6">
           <p className="text-sm text-muted-foreground">
-            <strong>Methodology:</strong> Automation risk is estimated based on job title analysis 
+            <strong>Methodology:</strong> Automation opportunity is estimated based on job title analysis 
             using industry research on AI and automation impact. Scores reflect the likelihood that 
             significant portions of the role's tasks could be automated within the next 5-10 years. 
-            High-risk roles (60%+) contain predominantly routine, rule-based tasks. Medium-risk roles 
-            (35-59%) have mixed task complexity. Low-risk roles (&lt;35%) require significant human 
+            High-opportunity roles (60%+) contain predominantly routine, rule-based tasks. Medium-opportunity roles 
+            (35-59%) have mixed task complexity. Low-opportunity roles (&lt;35%) require significant human 
             judgment, creativity, or interpersonal skills. This analysis should be validated with 
             detailed job descriptions and task-level assessment.
           </p>

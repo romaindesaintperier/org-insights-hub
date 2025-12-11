@@ -296,9 +296,21 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
             <div className="space-y-2">
               <h4 className="font-medium">Issues Identified</h4>
               {outliers.singleReport.length > 0 && (
-                <div className="flex items-center gap-2 text-sm text-destructive">
-                  <AlertTriangle className="w-4 h-4" />
-                  {outliers.singleReport.length} single-report managers
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-sm text-destructive">
+                    <AlertTriangle className="w-4 h-4" />
+                    {outliers.singleReport.length} single-report managers
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-1 ml-6">
+                    {outliers.singleReport.slice(0, 10).map((mgr) => (
+                      <span key={mgr.managerId} className="text-xs bg-destructive/10 px-2 py-1 rounded">
+                        {mgr.managerId}
+                      </span>
+                    ))}
+                    {outliers.singleReport.length > 10 && (
+                      <span className="text-xs text-muted-foreground">+{outliers.singleReport.length - 10} more</span>
+                    )}
+                  </div>
                 </div>
               )}
               {outliers.narrow.length > 0 && (
