@@ -206,44 +206,46 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
         </Card>
       </div>
 
-      {/* Layer Stats Summary - Stacked Bar Visualization */}
+      {/* Layer Stats Summary - Box Layout */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Layer Breakdown</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[120px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={[{ name: 'Layers', ...layerStats.reduce((acc, l) => ({ ...acc, [`L${l.layer}`]: l.headcount }), {}) }]} layout="horizontal">
-                <XAxis type="category" dataKey="name" hide />
-                <YAxis type="number" hide />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                  formatter={(value: number, name: string) => [value, `${name} Employees`]}
-                />
-                {layerStats.map((layer, index) => (
-                  <Bar 
-                    key={layer.layer} 
-                    dataKey={`L${layer.layer}`} 
-                    stackId="a" 
-                    fill={`hsl(var(--chart-${(index % 5) + 1}))`}
-                    radius={index === 0 ? [4, 0, 0, 4] : index === layerStats.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
-                  />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="flex flex-wrap justify-center gap-4 mt-4">
+          <div className="flex flex-wrap gap-3">
             {layerStats.map((layer, index) => (
-              <span key={layer.layer} className="flex items-center gap-2 text-sm">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: `hsl(var(--chart-${(index % 5) + 1}))` }} />
-                L{layer.layer}: {layer.headcount} ({layer.managers} mgrs / {layer.ics} ICs)
-              </span>
+              <div 
+                key={layer.layer}
+                className="flex-1 min-w-[120px] p-4 rounded-lg border border-border"
+                style={{ backgroundColor: `hsl(var(--chart-${(index % 5) + 1}) / 0.1)` }}
+              >
+                <div className="text-lg font-bold text-foreground mb-2">L{layer.layer}</div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Headcount:</span>
+                    <span className="font-medium text-foreground">{layer.headcount}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Managers:</span>
+                    <span className="font-medium" style={{ color: `hsl(var(--chart-${(index % 5) + 1}))` }}>{layer.managers}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">ICs:</span>
+                    <span className="font-medium text-foreground">{layer.ics}</span>
+                  </div>
+                </div>
+              </div>
             ))}
+          </div>
+          <div className="flex flex-wrap gap-4 mt-4 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-primary"></div>
+              <span>Managers</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-muted-foreground"></div>
+              <span>Individual Contributors</span>
+            </div>
           </div>
         </CardContent>
       </Card>
