@@ -54,30 +54,43 @@ export function LocationMap({ employees }: LocationMapProps) {
     return rows;
   }, [employees]);
 
-  // Group rows by country for visual grouping
+  // Group rows by country for visual grouping and calculate subtotals
   const groupedByCountry = useMemo(() => {
-    const groups: { country: string; rows: LocationRow[] }[] = [];
-    let currentCountry = '';
-    let currentGroup: LocationRow[] = [];
-    
+    // First, calculate country totals for sorting
+    const countryTotals = new Map<string, number>();
     locationData.forEach(row => {
-      if (row.country !== currentCountry) {
-        if (currentGroup.length > 0) {
-          groups.push({ country: currentCountry, rows: currentGroup });
-        }
-        currentCountry = row.country;
-        currentGroup = [row];
-      } else {
-        currentGroup.push(row);
-      }
+      countryTotals.set(row.country, (countryTotals.get(row.country) || 0) + row.headcount);
     });
     
-    if (currentGroup.length > 0) {
-      groups.push({ country: currentCountry, rows: currentGroup });
-    }
+    // Sort countries by total headcount descending
+    const sortedCountries = Array.from(countryTotals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([country]) => country);
+    
+    const groups: { country: string; rows: LocationRow[]; subtotal: { headcount: number; percentOfTotal: number; avgFLRR: number } }[] = [];
+    const totalHeadcount = employees.length;
+    
+    sortedCountries.forEach(country => {
+      const countryRows = locationData
+        .filter(row => row.country === country)
+        .sort((a, b) => b.headcount - a.headcount);
+      
+      const countryHeadcount = countryRows.reduce((sum, r) => sum + r.headcount, 0);
+      const countryTotalFLRR = countryRows.reduce((sum, r) => sum + r.avgFLRR * r.headcount, 0);
+      
+      groups.push({
+        country,
+        rows: countryRows,
+        subtotal: {
+          headcount: countryHeadcount,
+          percentOfTotal: totalHeadcount > 0 ? (countryHeadcount / totalHeadcount) * 100 : 0,
+          avgFLRR: countryHeadcount > 0 ? countryTotalFLRR / countryHeadcount : 0,
+        }
+      });
+    });
     
     return groups;
-  }, [locationData]);
+  }, [locationData, employees.length]);
 
   return (
     <Card>
@@ -102,17 +115,28 @@ export function LocationMap({ employees }: LocationMapProps) {
               </TableHeader>
               <TableBody>
                 {groupedByCountry.map((group, groupIndex) => (
-                  group.rows.map((row, rowIndex) => (
-                    <TableRow key={`${row.country}-${row.location}`} className={groupIndex % 2 === 0 ? 'bg-secondary/20' : ''}>
-                      <TableCell className="font-medium">
-                        {rowIndex === 0 ? row.country : ''}
-                      </TableCell>
-                      <TableCell>{row.location}</TableCell>
-                      <TableCell className="text-right">{row.headcount}</TableCell>
-                      <TableCell className="text-right">{formatPercent(row.percentOfTotal)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(row.avgFLRR)}</TableCell>
-                    </TableRow>
-                  ))
+                  <>
+                    {group.rows.map((row, rowIndex) => (
+                      <TableRow key={`${row.country}-${row.location}`} className={groupIndex % 2 === 0 ? 'bg-secondary/20' : ''}>
+                        <TableCell className="font-medium">
+                          {rowIndex === 0 ? row.country : ''}
+                        </TableCell>
+                        <TableCell>{row.location}</TableCell>
+                        <TableCell className="text-right">{row.headcount}</TableCell>
+                        <TableCell className="text-right">{formatPercent(row.percentOfTotal)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(row.avgFLRR)}</TableCell>
+                      </TableRow>
+                    ))}
+                    {/* Country subtotal row */}
+                    {group.rows.length > 1 && (
+                      <TableRow key={`${group.country}-subtotal`} className="bg-muted/50 font-medium">
+                        <TableCell className="text-right italic" colSpan={2}>{group.country} Subtotal</TableCell>
+                        <TableCell className="text-right">{group.subtotal.headcount}</TableCell>
+                        <TableCell className="text-right">{formatPercent(group.subtotal.percentOfTotal)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(group.subtotal.avgFLRR)}</TableCell>
+                      </TableRow>
+                    )}
+                  </>
                 ))}
               </TableBody>
             </Table>

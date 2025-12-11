@@ -442,7 +442,7 @@ export function AutomationAnalysis({ data }: AutomationAnalysisProps) {
           <p className="text-sm text-muted-foreground">
             <strong>Methodology:</strong> Automation opportunity is estimated based on job title analysis 
             using industry research on AI and automation impact. Scores reflect the likelihood that 
-            significant portions of the role's tasks could be automated within the next 5-10 years. 
+            significant portions of the role's tasks could be automated within the next 2–3 years. 
             High-opportunity roles (60%+) contain predominantly routine, rule-based tasks. Medium-opportunity roles 
             (35-59%) have mixed task complexity. Low-opportunity roles (&lt;35%) require significant human 
             judgment, creativity, or interpersonal skills. This analysis should be validated with 

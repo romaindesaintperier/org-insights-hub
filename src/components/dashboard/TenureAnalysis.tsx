@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { AnalysisData } from '@/types/employee';
@@ -32,9 +33,23 @@ const FUNCTION_COLORS = [
   'hsl(var(--accent))',
 ];
 
+type TimePeriod = 'L3M' | 'L6M' | 'L12M' | 'L24M' | 'L36M';
+
+const TIME_PERIOD_MONTHS: Record<TimePeriod, number> = {
+  'L3M': 3,
+  'L6M': 6,
+  'L12M': 12,
+  'L24M': 24,
+  'L36M': 36,
+};
+
 export function TenureAnalysis({ data }: TenureAnalysisProps) {
   const { employees, tenureBands, functionStats } = data;
   const now = new Date();
+  
+  // Filter states
+  const [newHirePeriod, setNewHirePeriod] = useState<TimePeriod>('L12M');
+  const [hiringTrendPeriod, setHiringTrendPeriod] = useState<TimePeriod>('L36M');
 
   // Calculate tenure for each employee
   const employeesWithTenure = useMemo(() => {
@@ -65,13 +80,16 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
     }).sort((a, b) => b.avgTenure - a.avgTenure);
   }, [employeesWithTenure, functionStats]);
 
-  // Hiring by quarter (last 20 quarters)
+  // Hiring by period (filtered based on selected period)
   const hiringByQuarter = useMemo(() => {
+    const monthsToShow = TIME_PERIOD_MONTHS[hiringTrendPeriod];
+    const quartersToShow = Math.ceil(monthsToShow / 3);
+    
     const quarters: { quarter: string; date: Date; hires: Record<string, number>; total: number }[] = [];
     const today = new Date();
     
-    // Generate last 20 quarters
-    for (let i = 19; i >= 0; i--) {
+    // Generate quarters for selected period
+    for (let i = quartersToShow - 1; i >= 0; i--) {
       const quarterDate = new Date(today);
       quarterDate.setMonth(today.getMonth() - (i * 3));
       const year = quarterDate.getFullYear();
@@ -111,14 +129,15 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
       })),
       functions,
     };
-  }, [employees]);
+  }, [employees, hiringTrendPeriod]);
 
-  // New hire concentration by function (past year)
+  // New hire concentration by function (filtered by period)
   const newHireConcentration = useMemo(() => {
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const months = TIME_PERIOD_MONTHS[newHirePeriod];
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - months);
     
-    const newHires = employees.filter(emp => new Date(emp.hireDate) >= oneYearAgo);
+    const newHires = employees.filter(emp => new Date(emp.hireDate) >= cutoffDate);
     const totalNewHires = newHires.length;
     
     const byFunction = functionStats.map(func => {
@@ -131,16 +150,17 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
     }).sort((a, b) => b.newHires - a.newHires);
     
     return { byFunction, totalNewHires };
-  }, [employees, functionStats]);
+  }, [employees, functionStats, newHirePeriod]);
 
-  // Highest growing functions (new hires / total employees in function)
+  // Highest growing functions (based on selected new hire period)
   const fastestGrowingFunctions = useMemo(() => {
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const months = TIME_PERIOD_MONTHS[newHirePeriod];
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - months);
     
     return functionStats.map(func => {
       const funcEmps = employees.filter(e => e.function === func.function);
-      const funcNewHires = funcEmps.filter(e => new Date(e.hireDate) >= oneYearAgo).length;
+      const funcNewHires = funcEmps.filter(e => new Date(e.hireDate) >= cutoffDate).length;
       const growthRate = funcEmps.length > 0 ? (funcNewHires / funcEmps.length) * 100 : 0;
       
       return {
@@ -150,10 +170,26 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
         growthRate,
       };
     }).sort((a, b) => b.growthRate - a.growthRate);
-  }, [employees, functionStats]);
+  }, [employees, functionStats, newHirePeriod]);
 
   const avgTenure = employeesWithTenure.reduce((sum, e) => sum + e.tenureYears, 0) / employees.length;
   const veterans = employeesWithTenure.filter(e => e.tenureYears >= 5);
+
+  const TimePeriodFilter = ({ value, onChange }: { value: TimePeriod; onChange: (v: TimePeriod) => void }) => (
+    <div className="flex gap-1">
+      {(['L3M', 'L6M', 'L12M', 'L24M', 'L36M'] as TimePeriod[]).map(period => (
+        <Button
+          key={period}
+          variant={value === period ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => onChange(period)}
+          className="text-xs px-2 py-1 h-7"
+        >
+          {period}
+        </Button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -315,10 +351,13 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
         </CardContent>
       </Card>
 
-      {/* Hiring Trend by Quarter */}
+      {/* Hiring Trend */}
       <Card>
         <CardHeader>
-          <CardTitle>Hiring Trend (Last 20 Quarters)</CardTitle>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <CardTitle>Hiring Trend</CardTitle>
+            <TimePeriodFilter value={hiringTrendPeriod} onChange={setHiringTrendPeriod} />
+          </div>
         </CardHeader>
         <CardContent>
           <div className="h-[400px]">
@@ -358,11 +397,14 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
       {/* New Hire Concentration by Function */}
       <Card>
         <CardHeader>
-          <CardTitle>New Hire Concentration by Function (Past Year)</CardTitle>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <CardTitle>New Hire Concentration by Function</CardTitle>
+            <TimePeriodFilter value={newHirePeriod} onChange={setNewHirePeriod} />
+          </div>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground mb-4">
-            Total new hires in past year: <strong>{newHireConcentration.totalNewHires}</strong>
+            Total new hires in selected period: <strong>{newHireConcentration.totalNewHires}</strong>
           </p>
           <Table>
             <TableHeader>
@@ -390,7 +432,7 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ArrowUp className="w-5 h-5 text-success" />
-            Fastest Growing Functions (Past Year)
+            Fastest Growing Functions
           </CardTitle>
         </CardHeader>
         <CardContent>
