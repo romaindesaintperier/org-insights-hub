@@ -9,6 +9,8 @@ import { OffshoringAnalysis } from './OffshoringAnalysis';
 import { CompensationAnalysis } from './CompensationAnalysis';
 import { TenureAnalysis } from './TenureAnalysis';
 import { HeadcountBreakdown } from './HeadcountBreakdown';
+import { OrgChart } from './OrgChart';
+import { AutomationAnalysis } from './AutomationAnalysis';
 import { 
   LayoutDashboard, 
   Layers, 
@@ -17,7 +19,9 @@ import {
   Clock, 
   Users,
   Upload,
-  Download
+  Download,
+  Network,
+  Bot
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -82,10 +86,14 @@ export function Dashboard({ employees, onReset }: DashboardProps) {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-6 mb-6">
+          <TabsList className="grid w-full grid-cols-8 mb-6">
             <TabsTrigger value="summary" className="flex items-center gap-2">
               <LayoutDashboard className="w-4 h-4" />
               <span className="hidden md:inline">Summary</span>
+            </TabsTrigger>
+            <TabsTrigger value="orgchart" className="flex items-center gap-2">
+              <Network className="w-4 h-4" />
+              <span className="hidden md:inline">Org Chart</span>
             </TabsTrigger>
             <TabsTrigger value="spans" className="flex items-center gap-2">
               <Layers className="w-4 h-4" />
@@ -103,6 +111,10 @@ export function Dashboard({ employees, onReset }: DashboardProps) {
               <Clock className="w-4 h-4" />
               <span className="hidden md:inline">Tenure</span>
             </TabsTrigger>
+            <TabsTrigger value="automation" className="flex items-center gap-2">
+              <Bot className="w-4 h-4" />
+              <span className="hidden md:inline">Automation</span>
+            </TabsTrigger>
             <TabsTrigger value="headcount" className="flex items-center gap-2">
               <Users className="w-4 h-4" />
               <span className="hidden md:inline">Headcount</span>
@@ -111,6 +123,10 @@ export function Dashboard({ employees, onReset }: DashboardProps) {
 
           <TabsContent value="summary">
             <ExecutiveSummary data={analysisData} />
+          </TabsContent>
+
+          <TabsContent value="orgchart">
+            <OrgChart data={analysisData} />
           </TabsContent>
 
           <TabsContent value="spans">
@@ -127,6 +143,10 @@ export function Dashboard({ employees, onReset }: DashboardProps) {
 
           <TabsContent value="tenure">
             <TenureAnalysis data={analysisData} />
+          </TabsContent>
+
+          <TabsContent value="automation">
+            <AutomationAnalysis data={analysisData} />
           </TabsContent>
 
           <TabsContent value="headcount">
