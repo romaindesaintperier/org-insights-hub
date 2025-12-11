@@ -91,6 +91,10 @@ export function Dashboard({ employees, onReset }: DashboardProps) {
               <LayoutDashboard className="w-4 h-4" />
               <span className="hidden md:inline">Summary</span>
             </TabsTrigger>
+            <TabsTrigger value="headcount" className="flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              <span className="hidden md:inline">Headcount</span>
+            </TabsTrigger>
             <TabsTrigger value="orgchart" className="flex items-center gap-2">
               <Network className="w-4 h-4" />
               <span className="hidden md:inline">Org Chart</span>
@@ -98,14 +102,6 @@ export function Dashboard({ employees, onReset }: DashboardProps) {
             <TabsTrigger value="spans" className="flex items-center gap-2">
               <Layers className="w-4 h-4" />
               <span className="hidden md:inline">Spans & Layers</span>
-            </TabsTrigger>
-            <TabsTrigger value="offshoring" className="flex items-center gap-2">
-              <Globe className="w-4 h-4" />
-              <span className="hidden md:inline">Offshoring</span>
-            </TabsTrigger>
-            <TabsTrigger value="compensation" className="flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              <span className="hidden md:inline">Compensation</span>
             </TabsTrigger>
             <TabsTrigger value="tenure" className="flex items-center gap-2">
               <Clock className="w-4 h-4" />
@@ -115,9 +111,13 @@ export function Dashboard({ employees, onReset }: DashboardProps) {
               <Bot className="w-4 h-4" />
               <span className="hidden md:inline">Automation</span>
             </TabsTrigger>
-            <TabsTrigger value="headcount" className="flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              <span className="hidden md:inline">Headcount</span>
+            <TabsTrigger value="offshoring" className="flex items-center gap-2">
+              <Globe className="w-4 h-4" />
+              <span className="hidden md:inline">Offshoring</span>
+            </TabsTrigger>
+            <TabsTrigger value="compensation" className="flex items-center gap-2">
+              <DollarSign className="w-4 h-4" />
+              <span className="hidden md:inline">Compensation</span>
             </TabsTrigger>
           </TabsList>
 

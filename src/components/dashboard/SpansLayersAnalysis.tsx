@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -13,7 +14,7 @@ interface SpansLayersAnalysisProps {
 }
 
 export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: SpansLayersAnalysisProps) {
-  const { layerStats, spanStats, functionSpanStats, totals } = data;
+  const { employees, layerStats, spanStats, functionSpanStats, totals } = data;
 
   // Span distribution data
   const spanDistribution = [
@@ -36,6 +37,18 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
     narrow: spanStats.filter(s => s.directReports > 1 && s.directReports < benchmarks.minSpan),
     wide: spanStats.filter(s => s.directReports > benchmarks.maxSpan),
   };
+
+  // Get direct report info for single-report managers
+  const singleReportManagersWithDetails = useMemo(() => {
+    return outliers.singleReport.map(mgr => {
+      // Find the direct report (employee whose managerId matches this manager)
+      const directReport = employees.find(emp => emp.managerId === mgr.managerId);
+      return {
+        ...mgr,
+        directReportTitle: directReport?.title || 'Unknown',
+      };
+    });
+  }, [outliers.singleReport, employees]);
 
   // Org-wide average span
   const orgAvgSpan = totals.avgSpan;
@@ -193,21 +206,43 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
         </Card>
       </div>
 
-      {/* Layer Stats Summary */}
+      {/* Layer Stats Summary - Stacked Bar Visualization */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Layer Breakdown</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {layerStats.map((layer) => (
-              <div key={layer.layer} className="p-3 rounded-lg bg-secondary/50">
-                <p className="text-sm font-medium text-primary">Layer {layer.layer}</p>
-                <p className="text-lg font-semibold">{layer.headcount}</p>
-                <p className="text-xs text-muted-foreground">
-                  {layer.managers} mgrs / {layer.ics} ICs
-                </p>
-              </div>
+          <div className="h-[120px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={[{ name: 'Layers', ...layerStats.reduce((acc, l) => ({ ...acc, [`L${l.layer}`]: l.headcount }), {}) }]} layout="horizontal">
+                <XAxis type="category" dataKey="name" hide />
+                <YAxis type="number" hide />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                  }}
+                  formatter={(value: number, name: string) => [value, `${name} Employees`]}
+                />
+                {layerStats.map((layer, index) => (
+                  <Bar 
+                    key={layer.layer} 
+                    dataKey={`L${layer.layer}`} 
+                    stackId="a" 
+                    fill={`hsl(var(--chart-${(index % 5) + 1}))`}
+                    radius={index === 0 ? [4, 0, 0, 4] : index === layerStats.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex flex-wrap justify-center gap-4 mt-4">
+            {layerStats.map((layer, index) => (
+              <span key={layer.layer} className="flex items-center gap-2 text-sm">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: `hsl(var(--chart-${(index % 5) + 1}))` }} />
+                L{layer.layer}: {layer.headcount} ({layer.managers} mgrs / {layer.ics} ICs)
+              </span>
             ))}
           </div>
         </CardContent>
@@ -296,21 +331,9 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
             <div className="space-y-2">
               <h4 className="font-medium">Issues Identified</h4>
               {outliers.singleReport.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2 text-sm text-destructive">
-                    <AlertTriangle className="w-4 h-4" />
-                    {outliers.singleReport.length} single-report managers
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-1 ml-6">
-                    {outliers.singleReport.slice(0, 10).map((mgr) => (
-                      <span key={mgr.managerId} className="text-xs bg-destructive/10 px-2 py-1 rounded">
-                        {mgr.managerId}
-                      </span>
-                    ))}
-                    {outliers.singleReport.length > 10 && (
-                      <span className="text-xs text-muted-foreground">+{outliers.singleReport.length - 10} more</span>
-                    )}
-                  </div>
+                <div className="flex items-center gap-2 text-sm text-destructive">
+                  <AlertTriangle className="w-4 h-4" />
+                  {outliers.singleReport.length} single-report managers
                 </div>
               )}
               {outliers.narrow.length > 0 && (
@@ -336,38 +359,6 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
         </Card>
       </div>
 
-      {/* Streamlining Opportunities */}
-      <Card className="gradient-aubergine text-primary-foreground">
-        <CardHeader>
-          <CardTitle className="text-primary-foreground">Streamlining Opportunities by Function</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm opacity-80 mb-4">
-            Functions with narrow spans, high manager percentages, or deep layer structures offer the most opportunity for organizational streamlining:
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {functionSpanStats
-              .map(func => ({
-                ...func,
-                score: (func.avgSpan < benchmarks.minSpan ? (benchmarks.minSpan - func.avgSpan) * 10 : 0) +
-                       (func.managerPercent > 20 ? func.managerPercent - 20 : 0) +
-                       (func.layers > 4 ? (func.layers - 4) * 5 : 0)
-              }))
-              .filter(f => f.score > 0)
-              .sort((a, b) => b.score - a.score)
-              .slice(0, 3)
-              .map((func, i) => (
-                <div key={func.function} className="p-4 rounded-lg bg-white/10">
-                  <div className="flex justify-between mb-2">
-                    <span className="font-semibold">{func.function}</span>
-                    <span className="text-xs bg-white/20 px-2 py-1 rounded">#{i + 1}</span>
-                  </div>
-                  <p className="text-sm opacity-80">Span: {func.avgSpan.toFixed(1)} | Mgr%: {func.managerPercent.toFixed(0)}% | Layers: {func.layers}</p>
-                </div>
-              ))}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Function Spans & Layers Table */}
       <Card>
@@ -402,44 +393,52 @@ export function SpansLayersAnalysis({ data, benchmarks = defaultBenchmarks }: Sp
                 </TableRow>
               ))}
               {/* Org Average Row */}
-              <TableRow className="bg-secondary/30 font-medium">
-                <TableCell>Organization Average</TableCell>
-                <TableCell className="text-right">{totals.headcount}</TableCell>
-                <TableCell className="text-right">{totals.totalManagers}</TableCell>
-                <TableCell className="text-right">{formatPercent(totals.managerPercent)}</TableCell>
-                <TableCell className="text-right">{orgAvgSpan.toFixed(1)}</TableCell>
-                <TableCell className="text-right">{orgAvgLayers}</TableCell>
+              <TableRow className="bg-secondary/30">
+                <TableCell className="font-bold">Organization Average</TableCell>
+                <TableCell className="text-right font-bold">{totals.headcount}</TableCell>
+                <TableCell className="text-right font-bold">{totals.totalManagers}</TableCell>
+                <TableCell className="text-right font-bold">{formatPercent(totals.managerPercent)}</TableCell>
+                <TableCell className="text-right font-bold">{orgAvgSpan.toFixed(1)}</TableCell>
+                <TableCell className="text-right font-bold">{orgAvgLayers}</TableCell>
               </TableRow>
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
-      {/* Single Report Managers List */}
-      {outliers.singleReport.length > 0 && (
+      {/* Single Report Managers Table */}
+      {singleReportManagersWithDetails.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-destructive" />
-              Single-Report Managers
+              Single-Report Managers ({singleReportManagersWithDetails.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {outliers.singleReport.slice(0, 12).map((mgr) => (
-                <div key={mgr.managerId} className="p-3 rounded-lg border bg-destructive/5">
-                  <p className="font-medium">{mgr.managerName}</p>
-                  <p className="text-sm text-muted-foreground">{mgr.function}</p>
-                  <p className="text-xs text-muted-foreground">Layer {mgr.layer}</p>
-                </div>
-              ))}
-              {outliers.singleReport.length > 12 && (
-                <div className="p-3 rounded-lg border bg-secondary/50 flex items-center justify-center">
-                  <p className="text-sm text-muted-foreground">
-                    +{outliers.singleReport.length - 12} more
-                  </p>
-                </div>
-              )}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Function</TableHead>
+                    <TableHead>Manager Title</TableHead>
+                    <TableHead>Employee ID</TableHead>
+                    <TableHead className="text-center">Layer</TableHead>
+                    <TableHead>Direct Report Title</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {singleReportManagersWithDetails.map((mgr) => (
+                    <TableRow key={mgr.managerId}>
+                      <TableCell className="font-medium">{mgr.function}</TableCell>
+                      <TableCell>{mgr.managerName}</TableCell>
+                      <TableCell className="text-muted-foreground">{mgr.managerId}</TableCell>
+                      <TableCell className="text-center">{mgr.layer}</TableCell>
+                      <TableCell>{mgr.directReportTitle}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>

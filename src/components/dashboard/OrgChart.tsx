@@ -327,7 +327,17 @@ export function OrgChart({ data }: OrgChartProps) {
 
   const handleResetZoom = useCallback(() => {
     setIsAnimating(true);
-    setTransform({ x: 0, y: 0, scale: 1 });
+    // Center on CEO node - calculate offset to center it in the container
+    const container = containerRef.current;
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      // Center the content with some padding from left (for the CEO node to be centered)
+      const centerX = rect.width / 2 - 128; // 128 is half of node width (256/2)
+      const centerY = 50; // Give some padding from top
+      setTransform({ x: centerX, y: centerY, scale: 1 });
+    } else {
+      setTransform({ x: 0, y: 0, scale: 1 });
+    }
     setTimeout(() => setIsAnimating(false), 200);
   }, []);
 

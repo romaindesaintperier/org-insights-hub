@@ -169,6 +169,13 @@ export function OffshoringAnalysis({ data }: OffshoringAnalysisProps) {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* User Input Required Message */}
+      <div className="p-4 rounded-lg bg-warning/10 border border-warning/30 text-warning-foreground">
+        <p className="text-sm font-medium text-warning">
+          User input required to classify countries into high-cost vs. best-cost, and to estimate offshoring potential.
+        </p>
+      </div>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-success/10 border-success/30">
@@ -356,7 +363,7 @@ export function OffshoringAnalysis({ data }: OffshoringAnalysisProps) {
 
         <Card>
           <CardHeader>
-            <CardTitle>BCC Penetration by Function</CardTitle>
+            <CardTitle>Best-Cost Country Penetration by Function</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[250px]">
