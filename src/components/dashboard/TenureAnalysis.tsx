@@ -80,23 +80,23 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
     }).sort((a, b) => b.avgTenure - a.avgTenure);
   }, [employeesWithTenure, functionStats]);
 
-  // Hiring by period (filtered based on selected period)
-  const hiringByQuarter = useMemo(() => {
+  // Hiring by month (filtered based on selected period)
+  const hiringByMonth = useMemo(() => {
     const monthsToShow = TIME_PERIOD_MONTHS[hiringTrendPeriod];
-    const quartersToShow = Math.ceil(monthsToShow / 3);
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     
-    const quarters: { quarter: string; date: Date; hires: Record<string, number>; total: number }[] = [];
+    const months: { month: string; date: Date; hires: Record<string, number>; total: number }[] = [];
     const today = new Date();
     
-    // Generate quarters for selected period
-    for (let i = quartersToShow - 1; i >= 0; i--) {
-      const quarterDate = new Date(today);
-      quarterDate.setMonth(today.getMonth() - (i * 3));
-      const year = quarterDate.getFullYear();
-      const q = Math.floor(quarterDate.getMonth() / 3) + 1;
-      quarters.push({
-        quarter: `Q${q} ${year}`,
-        date: new Date(year, (q - 1) * 3, 1),
+    // Generate months for selected period
+    for (let i = monthsToShow - 1; i >= 0; i--) {
+      const monthDate = new Date(today);
+      monthDate.setMonth(today.getMonth() - i);
+      const year = monthDate.getFullYear();
+      const monthIdx = monthDate.getMonth();
+      months.push({
+        month: `${monthNames[monthIdx]} '${String(year).slice(-2)}`,
+        date: new Date(year, monthIdx, 1),
         hires: {},
         total: 0,
       });
@@ -105,27 +105,27 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
     // Get unique functions for coloring
     const functions = [...new Set(employees.map(e => e.function))];
 
-    // Count hires per quarter per function
+    // Count hires per month per function
     employees.forEach(emp => {
       const hireDate = new Date(emp.hireDate);
       
-      quarters.forEach(q => {
-        const quarterEnd = new Date(q.date);
-        quarterEnd.setMonth(quarterEnd.getMonth() + 3);
+      months.forEach(m => {
+        const monthEnd = new Date(m.date);
+        monthEnd.setMonth(monthEnd.getMonth() + 1);
         
-        if (hireDate >= q.date && hireDate < quarterEnd) {
-          q.hires[emp.function] = (q.hires[emp.function] || 0) + 1;
-          q.total++;
+        if (hireDate >= m.date && hireDate < monthEnd) {
+          m.hires[emp.function] = (m.hires[emp.function] || 0) + 1;
+          m.total++;
         }
       });
     });
 
     // Convert to chart format
     return {
-      data: quarters.map(q => ({
-        quarter: q.quarter,
-        ...q.hires,
-        total: q.total,
+      data: months.map(m => ({
+        month: m.month,
+        ...m.hires,
+        total: m.total,
       })),
       functions,
     };
@@ -362,11 +362,11 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
         <CardContent>
           <div className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={hiringByQuarter.data}>
+              <BarChart data={hiringByMonth.data}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis 
-                  dataKey="quarter" 
-                  tick={{ fontSize: 10 }} 
+                  dataKey="month" 
+                  tick={{ fontSize: 9 }} 
                   angle={-45} 
                   textAnchor="end" 
                   height={60}
@@ -380,7 +380,7 @@ export function TenureAnalysis({ data }: TenureAnalysisProps) {
                   }}
                 />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                {hiringByQuarter.functions.map((func, index) => (
+                {hiringByMonth.functions.map((func, index) => (
                   <Bar 
                     key={func} 
                     dataKey={func} 
