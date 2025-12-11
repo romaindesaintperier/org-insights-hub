@@ -26,8 +26,8 @@ export function QuickWinsPanel({ quickWins }: QuickWinsPanelProps) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Lightbulb className="w-5 h-5 text-accent" />
-            Quick Wins
+          <Lightbulb className="w-5 h-5 text-accent" />
+            Value Creation Opportunities
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -44,7 +44,7 @@ export function QuickWinsPanel({ quickWins }: QuickWinsPanelProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Lightbulb className="w-5 h-5 text-accent" />
-          Quick Wins
+          Value Creation Opportunities
           <Badge variant="secondary" className="ml-2">
             {quickWins.length} opportunities
           </Badge>

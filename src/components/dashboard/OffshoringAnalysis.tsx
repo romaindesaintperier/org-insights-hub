@@ -457,6 +457,36 @@ export function OffshoringAnalysis({ data }: OffshoringAnalysisProps) {
                     </TableRow>
                   );
                 })}
+                {/* Total Row */}
+                <TableRow className="bg-secondary/50 font-semibold border-t-2">
+                  <TableCell>Total</TableCell>
+                  <TableCell className="text-right">
+                    {functionOffshoringStats.reduce((sum, f) => sum + f.totalHeadcount, 0)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatPercent(
+                      functionOffshoringStats.reduce((sum, f) => sum + f.bccHeadcount, 0) / 
+                      Math.max(1, functionOffshoringStats.reduce((sum, f) => sum + f.totalHeadcount, 0)) * 100
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatPercent(
+                      functionOffshoringStats.reduce((sum, f) => sum + f.hccHeadcount, 0) / 
+                      Math.max(1, functionOffshoringStats.reduce((sum, f) => sum + f.totalHeadcount, 0)) * 100
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(
+                      functionOffshoringStats.reduce((sum, f) => sum + f.avgFLRR * f.totalHeadcount, 0) / 
+                      Math.max(1, functionOffshoringStats.reduce((sum, f) => sum + f.totalHeadcount, 0))
+                    )}
+                  </TableCell>
+                  <TableCell className="text-center">-</TableCell>
+                  <TableCell className="text-center">-</TableCell>
+                  <TableCell className="text-right text-primary">
+                    {formatCurrency(functionOffshoringStats.reduce((sum, f) => sum + f.potentialSavings, 0))}
+                  </TableCell>
+                </TableRow>
               </TableBody>
             </Table>
           </div>
