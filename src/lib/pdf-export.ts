@@ -18,7 +18,7 @@ const TABS_CONFIG: TabConfig[] = [
   { id: 'compensation', title: 'Compensation Analysis' },
 ];
 
-// A4 dimensions in mm
+// A4 dimensions in mm (210 x 297)
 const PAGE_WIDTH = 210;
 const PAGE_HEIGHT = 297;
 const MARGIN = 15;
