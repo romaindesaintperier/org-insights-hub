@@ -1,5 +1,5 @@
 import { Employee } from '@/types/employee';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 export interface ColumnMapping {
   employeeId: string | null;
@@ -96,126 +96,150 @@ export function autoDetectColumns(headers: string[]): ColumnMapping {
   return mapping;
 }
 
-export function readFileHeaders(file: File): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+export async function readFileHeaders(file: File): Promise<string[]> {
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(arrayBuffer);
+  
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) {
+    throw new Error('File is empty');
+  }
 
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
-
-        if (jsonData.length < 1) {
-          reject(new Error('File is empty'));
-          return;
-        }
-
-        const headers = (jsonData[0] as string[]).map(h => String(h || '').trim()).filter(h => h);
-        resolve(headers);
-      } catch (error) {
-        reject(error);
-      }
-    };
-
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsBinaryString(file);
+  const firstRow = worksheet.getRow(1);
+  const headers: string[] = [];
+  
+  firstRow.eachCell({ includeEmpty: false }, (cell) => {
+    const value = cell.value;
+    const headerValue = value instanceof Date 
+      ? value.toISOString() 
+      : String(value || '').trim();
+    if (headerValue) {
+      headers.push(headerValue);
+    }
   });
+
+  if (headers.length === 0) {
+    throw new Error('File is empty');
+  }
+
+  return headers;
 }
 
-export function parseExcelFile(
+export async function parseExcelFile(
   file: File, 
   customMapping?: ColumnMapping
 ): Promise<{ employees: Employee[]; errors: string[]; warnings: string[] }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(arrayBuffer);
+  
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet || worksheet.rowCount < 2) {
+    throw new Error('File is empty or has no data rows');
+  }
 
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
+  // Get headers from first row
+  const headers: string[] = [];
+  const headerRow = worksheet.getRow(1);
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    const value = cell.value;
+    const headerValue = value instanceof Date 
+      ? value.toISOString() 
+      : String(value || '').trim();
+    // Store with 1-based index position
+    headers[colNumber - 1] = headerValue;
+  });
 
-        if (jsonData.length < 2) {
-          reject(new Error('File is empty or has no data rows'));
-          return;
+  const mapping = customMapping || autoDetectColumns(headers.filter(h => h));
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // Check important columns
+  const missingImportant = importantFields.filter(col => !mapping[col]);
+  if (missingImportant.length > 0) {
+    warnings.push(`Missing columns (some analyses may be limited): ${missingImportant.map(f => fieldLabels[f]).join(', ')}`);
+  }
+
+  const employees: Employee[] = [];
+
+  // Iterate through data rows (starting from row 2)
+  for (let rowNum = 2; rowNum <= worksheet.rowCount; rowNum++) {
+    const row = worksheet.getRow(rowNum);
+    
+    // Skip empty rows
+    const rowValues: (string | number | Date | null)[] = [];
+    let hasValues = false;
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      const value = cell.value;
+      // Handle ExcelJS cell value types
+      let cellValue: string | number | Date | null = null;
+      if (value instanceof Date) {
+        cellValue = value;
+      } else if (typeof value === 'object' && value !== null) {
+        // Handle rich text or formula results
+        if ('result' in value) {
+          cellValue = value.result as string | number;
+        } else if ('text' in value) {
+          cellValue = (value as { text: string }).text;
+        } else {
+          cellValue = String(value);
         }
-
-        const headers = (jsonData[0] as string[]).map(h => String(h || '').trim());
-        const mapping = customMapping || autoDetectColumns(headers);
-        const errors: string[] = [];
-        const warnings: string[] = [];
-
-        // Check important columns
-        const missingImportant = importantFields.filter(col => !mapping[col]);
-        if (missingImportant.length > 0) {
-          warnings.push(`Missing columns (some analyses may be limited): ${missingImportant.map(f => fieldLabels[f]).join(', ')}`);
-        }
-
-        const employees: Employee[] = [];
-
-        for (let i = 1; i < jsonData.length; i++) {
-          const row = jsonData[i] as (string | number | Date)[];
-          if (!row || row.length === 0 || row.every(cell => !cell)) continue;
-
-          const getValue = (key: keyof ColumnMapping): string | number | Date | null => {
-            const colName = mapping[key];
-            if (!colName) return null;
-            const colIndex = headers.indexOf(colName);
-            return colIndex >= 0 ? row[colIndex] : null;
-          };
-
-          const employeeId = String(getValue('employeeId') || `EMP-${i}`);
-          const flrrValue = getValue('flrr');
-          const flrr = typeof flrrValue === 'number' ? flrrValue : parseFloat(String(flrrValue || '0').replace(/[$,]/g, ''));
-          
-          const baseValue = getValue('baseSalary');
-          const baseSalary = typeof baseValue === 'number' ? baseValue : parseFloat(String(baseValue || '0').replace(/[$,]/g, ''));
-          
-          const bonusValue = getValue('bonus');
-          const bonus = typeof bonusValue === 'number' ? bonusValue : parseFloat(String(bonusValue || '0').replace(/[$,]/g, ''));
-
-          const hireDateValue = getValue('hireDate');
-          let hireDate: string;
-          if (hireDateValue instanceof Date) {
-            hireDate = hireDateValue.toISOString().split('T')[0];
-          } else if (hireDateValue) {
-            const parsed = new Date(String(hireDateValue));
-            hireDate = !isNaN(parsed.getTime()) ? parsed.toISOString().split('T')[0] : '2020-01-01';
-          } else {
-            hireDate = '2020-01-01';
-          }
-
-          employees.push({
-            employeeId,
-            managerId: getValue('managerId') ? String(getValue('managerId')) : null,
-            function: String(getValue('function') || 'Unknown'),
-            title: String(getValue('title') || 'Unknown'),
-            location: String(getValue('location') || 'Unknown'),
-            country: String(getValue('country') || 'Unknown'),
-            hireDate,
-            flrr: isNaN(flrr) ? 0 : flrr,
-            baseSalary: isNaN(baseSalary) ? 0 : baseSalary,
-            bonus: isNaN(bonus) ? 0 : bonus,
-            businessUnit: String(getValue('businessUnit') || 'Unknown'),
-          });
-        }
-
-        if (employees.length === 0) {
-          errors.push('No valid employee records found');
-        }
-
-        resolve({ employees, errors, warnings });
-      } catch (error) {
-        reject(error);
+      } else {
+        cellValue = value as string | number | null;
       }
+      rowValues[colNumber - 1] = cellValue;
+      if (cellValue !== null && cellValue !== '') hasValues = true;
+    });
+
+    if (!hasValues) continue;
+
+    const getValue = (key: keyof ColumnMapping): string | number | Date | null => {
+      const colName = mapping[key];
+      if (!colName) return null;
+      const colIndex = headers.indexOf(colName);
+      return colIndex >= 0 ? rowValues[colIndex] : null;
     };
 
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsBinaryString(file);
-  });
+    const employeeId = String(getValue('employeeId') || `EMP-${rowNum - 1}`);
+    const flrrValue = getValue('flrr');
+    const flrr = typeof flrrValue === 'number' ? flrrValue : parseFloat(String(flrrValue || '0').replace(/[$,]/g, ''));
+    
+    const baseValue = getValue('baseSalary');
+    const baseSalary = typeof baseValue === 'number' ? baseValue : parseFloat(String(baseValue || '0').replace(/[$,]/g, ''));
+    
+    const bonusValue = getValue('bonus');
+    const bonus = typeof bonusValue === 'number' ? bonusValue : parseFloat(String(bonusValue || '0').replace(/[$,]/g, ''));
+
+    const hireDateValue = getValue('hireDate');
+    let hireDate: string;
+    if (hireDateValue instanceof Date) {
+      hireDate = hireDateValue.toISOString().split('T')[0];
+    } else if (hireDateValue) {
+      const parsed = new Date(String(hireDateValue));
+      hireDate = !isNaN(parsed.getTime()) ? parsed.toISOString().split('T')[0] : '2020-01-01';
+    } else {
+      hireDate = '2020-01-01';
+    }
+
+    employees.push({
+      employeeId,
+      managerId: getValue('managerId') ? String(getValue('managerId')) : null,
+      function: String(getValue('function') || 'Unknown'),
+      title: String(getValue('title') || 'Unknown'),
+      location: String(getValue('location') || 'Unknown'),
+      country: String(getValue('country') || 'Unknown'),
+      hireDate,
+      flrr: isNaN(flrr) ? 0 : flrr,
+      baseSalary: isNaN(baseSalary) ? 0 : baseSalary,
+      bonus: isNaN(bonus) ? 0 : bonus,
+      businessUnit: String(getValue('businessUnit') || 'Unknown'),
+    });
+  }
+
+  if (employees.length === 0) {
+    errors.push('No valid employee records found');
+  }
+
+  return { employees, errors, warnings };
 }
